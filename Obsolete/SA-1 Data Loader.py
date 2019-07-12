@@ -358,141 +358,7 @@ def DescriptivesExportLinked(Dataset): #TODO Dr.G wants descriptives that are in
     pass
 
 
-def DescriptivesExport(Dataset):
-    #Dr.G Likes to visually page through the data to look for outliers and strange values.
-    #He uses a copy and paste macro I can't replicate. This should work though.
-    outpath = r'C:\Users\mattm\PycharmProjects\GazmuriDataLoader\Export\\'
-    workbook = xlwrite.Workbook(outpath + 'Descriptives.xlsx', {'nan_inf_to_errors': False})
-    worksheet = workbook.add_worksheet()
-    #Add formats here
-    FormulaFormat = workbook.add_format({'bold': True, 'border': 1, 'bg_color': '#FFA500'})
-    FieldFormat = workbook.add_format({'text_wrap': True })
-    #Row, colunm, data
-    # worksheet.write(0, 2, "TEst test yo world")
 
-    #Get all fields from the first dataset.
-    fields = list(Dataset[0].keys())
-    #Develop a list of interventions.
-    groups = list(selectData(Dataset).keys())
-    groups.sort() #Sort alphabetical. might change when we unblind. TODO.
-    TypeList = []
-    #Develop a dict that has the indexes as a list for each group.
-    groupIdx = {key: [] for key in groups}
-    for idx, data in enumerate(Dataset):
-        groupIdx[str(data['Intervention'])].append(idx)
-
-    (row, col) = (0, 0) #Where to start counting from.
-
-    for index, field in enumerate(fields):
-        if index == 0:  # write the first 2 columns that Dr.G has set up.
-            col1 = (r'Exp.#,Intervention,General,BL,' + ('LL/TBI,' * 35)).split(',')
-            col1.pop(-1)  # Drop the last entry in the list
-            col2a = np.concatenate((np.arange(0, 15 + 5, 5), np.arange(30, 240 + 15, 15)))
-            col2b = np.arange(8, 72 + 4, 4)
-            col2 = []
-            for num in col2a:
-                col2.append(str(num) + ' min')
-            for num in col2b:
-                col2.append(str(num) + ' h')
-            for i, entry in enumerate(col1):
-                worksheet.write(i + 2, col, entry)
-                if i < len(col2):
-                    worksheet.write(i + 5, col + 1, col2[i])
-            col += 2  # Move over 2 cols
-        groupcounter = [] #Reset counter each time we go to a new field, it will be the same each time but why not?
-        for i, group in enumerate(groups):
-            #here we enter the data in for each group starting with the field, then the exp num, then the intervention, then the data.
-            groupData = [Dataset[index] for index in groupIdx[group]]
-            groupcounter.append(0)
-            for exp in groupData:
-                data = exp[field]
-
-                worksheet.write(row+1, col, field, FieldFormat) #Write the field name we are intrested in.
-                worksheet.write(row+2, col, exp['experimentNumber'], FieldFormat)  # Write the experiment number for this col.
-                worksheet.write(row+3, col, group, FieldFormat)  # Write the treatment
-
-                if isinstance(data, (type(pd.Series()), type(list()), type(np.array(1)))): #Need to discriminate between single valued fields and array based fields.
-                    for i, datum in enumerate(data):
-                        if not np.isnan(datum):
-                            try:
-                                worksheet.write(row+5+i, col, datum)
-                            except:
-                                print("an error from the first write statement happened")
-                elif isinstance(data, (type(datetime.datetime.now()), type(str()), type(int()), type(float()), type(datetime.time()))): #Many types are loaded from excel data.
-                    try:
-                        worksheet.write(row + 4, col, data)
-                    except:
-                        print("an error from the Second write statement happened")
-
-
-
-                else:
-                    if type(data) not in TypeList:
-                        TypeList.append(type(data))
-
-                col += 1 #move over 1 col every exp.
-                groupcounter[-1] += 1 #count the number of experiments in each group
-
-        #Between each group we need 5 rows to calc the sumamary statstics. First figure out the excel addresses for the start:stop points.
-        #write the headers for the rows #Dr.G wants the summary statistics at the end of all four groups. Each of the groups can have a different 5 colunm summary stats.
-        for ix, group in enumerate(groups):
-
-            worksheet.write_string(row+2, col, "Mean", FormulaFormat)
-            worksheet.write_string(row+2, col+1, "SEM", FormulaFormat)
-            worksheet.write_string(row+2, col + 2, "n", FormulaFormat)
-            worksheet.write_string(row+2, col + 3, "Min", FormulaFormat)
-            worksheet.write_string(row+2, col + 4, "Max", FormulaFormat)
-
-            #Put in the group name for each of the stats cols. Merge these cells later
-            worksheet.write_string(row + 3, col, group, FormulaFormat)
-            worksheet.write_string(row + 3, col + 1, group, FormulaFormat)
-            worksheet.write_string(row + 3, col + 2, group, FormulaFormat)
-            worksheet.write_string(row + 3, col + 3, group, FormulaFormat)
-            worksheet.write_string(row + 3, col + 4, group, FormulaFormat)
-
-            for statrow in range(row+4, len(col2)+6):
-
-                ncol = str(xlwrite.utility.xl_col_to_name(col + 2)) + str(statrow)
-                slide = 5 * ix #Slide over enough to not count the previous summary columns.
-                startcol = str(xlwrite.utility.xl_col_to_name(col - slide - (sum(groupcounter[ix:len(groups)])) )) + str(statrow)
-                stopcol = str(xlwrite.utility.xl_col_to_name(col - 1 - slide - (sum(groupcounter[ix+1:len(groups)]))  )) + str(statrow)
-
-                # ncol = str(xlwrite.utility.xl_col_to_name(col+2)) + str(statrow)
-                # startcol = str(xlwrite.utility.xl_col_to_name(col-(len(groupData)*len(groups)))) + str(statrow)
-                # stopcol = str(xlwrite.utility.xl_col_to_name(col-1)) + str(statrow)
-
-
-
-                worksheet.write_formula(statrow-1, col, '=IF('+ ncol+'=0,"",AVERAGE('+ startcol + ':' + stopcol + '))', FormulaFormat)
-                worksheet.write_formula(statrow-1, col+1, '=IF(' + ncol + '=0,"",STDEV(' + startcol + ':' + stopcol + ')/SQRT(' + ncol + '))', FormulaFormat)
-                worksheet.write_formula(statrow-1, col+2, '=COUNT('+ startcol + ':' + stopcol + ')', FormulaFormat) #NCol
-                worksheet.write_formula(statrow-1, col+3, '=IF(' + ncol + '=0,"",MIN(' + startcol + ':' + stopcol + '))', FormulaFormat)
-                worksheet.write_formula(statrow-1, col+4, '=IF(' + ncol + '=0,"",MAX(' + startcol + ':' + stopcol + '))', FormulaFormat)
-
-            #Dr.G wants a max of max and min of min col to help look for outliers.
-            startrow = str(xlwrite.utility.xl_col_to_name(col + 0) + str(4))
-            stoprow = str(xlwrite.utility.xl_col_to_name(col + 0) + str(len(col2)+4))
-            worksheet.write_formula(len(col2)+6, col + 0,
-                                    'AVERAGE(' + startrow + ':' + stoprow + ')', FormulaFormat)
-            startrow = str(xlwrite.utility.xl_col_to_name(col + 3) + str(4))
-            stoprow = str(xlwrite.utility.xl_col_to_name(col + 3) + str(len(col2)+4))
-            worksheet.write_formula(len(col2)+6, col + 3,
-                                    'MIN(' + startrow + ':' + stoprow + ')', FormulaFormat)
-            startrow = str(xlwrite.utility.xl_col_to_name(col + 4) + str(4))
-            stoprow = str(xlwrite.utility.xl_col_to_name(col + 4) + str(len(col2) + 4))
-            worksheet.write_formula(len(col2)+6, col + 4,
-                                    'MAX(' + startrow + ':' + stoprow + ')', FormulaFormat)
-            col += 5  # move over 5 col after every group/treatment. Start the next field output.
-
-
-
-
-
-
-    #xlsxwriter.utility.xl_col_to_name(index) #use to figure out cols from numbers.
-
-    print(TypeList) #Some of the time obj are being rejected. find out why.
-    workbook.close()
 
 
 
@@ -661,6 +527,9 @@ def getfiles(dirpath): #Pulled from stack overflow, returns files sorted by last
          if os.path.isfile(os.path.join(dirpath, s))]
     a.sort(key=lambda s: os.path.getmtime(os.path.join(dirpath, s)))
     return a
+
+
+
 
 if __name__ == "__main__":
 

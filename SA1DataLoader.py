@@ -3,6 +3,11 @@ This file loads the excel data from the survival HS/TBI experiment. It parses th
 output functions, subselection functions and plotting functions that should be general enough to use conversationally.
 Matt Maggio
 4/12/19
+
+This file has grown signficantly since I started it. It now houses a lot of functionality related to the SA-1 Experiments.
+Need to possibly break this file out into a class calling the loader functions here.
+6/7/19
+
 """
 
 import pandas as pd
@@ -396,10 +401,11 @@ def DescriptivesExport(Dataset):
                 if i < len(col2):
                     worksheet.write(i + 5, col + 1, col2[i])
             col += 2  # Move over 2 cols
-
-        for group in groups:
+        groupcounter = [] #Reset counter each time we go to a new field, it will be the same each time but why not?
+        for i, group in enumerate(groups):
             #here we enter the data in for each group starting with the field, then the exp num, then the intervention, then the data.
             groupData = [Dataset[index] for index in groupIdx[group]]
+            groupcounter.append(0)
             for exp in groupData:
                 data = exp[field]
 
@@ -427,6 +433,7 @@ def DescriptivesExport(Dataset):
                         TypeList.append(type(data))
 
                 col += 1 #move over 1 col every exp.
+                groupcounter[-1] += 1 #count the number of experiments in each group
 
         #Between each group we need 5 rows to calc the sumamary statstics. First figure out the excel addresses for the start:stop points.
         #write the headers for the rows #Dr.G wants the summary statistics at the end of all four groups. Each of the groups can have a different 5 colunm summary stats.
@@ -445,14 +452,13 @@ def DescriptivesExport(Dataset):
             worksheet.write_string(row + 3, col + 3, group, FormulaFormat)
             worksheet.write_string(row + 3, col + 4, group, FormulaFormat)
 
-            for statrow in range(row+5, len(col2)+6):
-                #Fix this so that there are 4 summery statstics areas.
+            for statrow in range(row+4, len(col2)+6):
 
-                #Old version didn't do each group.
                 ncol = str(xlwrite.utility.xl_col_to_name(col + 2)) + str(statrow)
-                slide = 5 * ix
-                startcol = str(xlwrite.utility.xl_col_to_name(col - slide - (len(groupData) * abs(len(groups) - ix)))) + str(statrow)
-                stopcol = str(xlwrite.utility.xl_col_to_name(col - 1 - slide - (len(groupData) * abs(len(groups) - (ix+1))))) + str(statrow)
+                slide = 5 * ix #Slide over enough to not count the previous summary columns.
+                startcol = str(xlwrite.utility.xl_col_to_name(col - slide - (sum(groupcounter[ix:len(groups)])) )) + str(statrow)
+                stopcol = str(xlwrite.utility.xl_col_to_name(col - 1 - slide - (sum(groupcounter[ix+1:len(groups)]))  )) + str(statrow)
+
                 # ncol = str(xlwrite.utility.xl_col_to_name(col+2)) + str(statrow)
                 # startcol = str(xlwrite.utility.xl_col_to_name(col-(len(groupData)*len(groups)))) + str(statrow)
                 # stopcol = str(xlwrite.utility.xl_col_to_name(col-1)) + str(statrow)
@@ -479,11 +485,6 @@ def DescriptivesExport(Dataset):
             worksheet.write_formula(len(col2)+6, col + 4,
                                     'MAX(' + startrow + ':' + stoprow + ')', FormulaFormat)
             col += 5  # move over 5 col after every group/treatment. Start the next field output.
-
-
-
-
-
 
     #xlsxwriter.utility.xl_col_to_name(index) #use to figure out cols from numbers.
 
@@ -596,15 +597,16 @@ def MSCPlots(Dataset, makePlots = None):
 if __name__ == "__main__":
 
 
-    experiment_lst = np.arange(2018104,2018156) #Create a range of the experiment lists
-    censor = np.isin(experiment_lst,[2018112, 2018120, 2018123, 2018153]) #Create a boolean mask to exclude censored exps from the lst.
+    experiment_lst = np.arange(2018104,2018168+1) #Create a range of the experiment lists
+    censor = np.isin(experiment_lst,[2018112, 2018120, 2018123, 2018153, 2018156]) #Create a boolean mask to exclude censored exps from the lst.
     censor = [not i for i in censor] #Invert the boolean mask
     experiment_lst = experiment_lst[censor] #Drop censored exp numbers
     experiment_lst = list(map(str, experiment_lst)) #Convert the list to strings
 
     # path = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\SA-1 Survival Phase (Master  Workbook) April 12, 2019 (masked).xlsx" #old data before groups became public.
     # path = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\SA-1 Survival Phase (Master  Workbook) April 23, 2019 (Check Values Fixed).xlsx"
-    path = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\SA-1 Survival Phase (Master  Workbook) May 2, 2019 (Check Values Fixed).xlsx"
+    # path = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\SA-1 Survival Phase (Master  Workbook) May 2, 2019 (Check Values Fixed).xlsx"
+    path = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\SA-1 Survival Phase (Master  Workbook) July 12 2019.xlsx"
     print(experiment_lst)
     Dataset = Parse_excel(path=path, Experiment_lst=experiment_lst)
     Ao = selectData(Dataset, returnLists=False)
