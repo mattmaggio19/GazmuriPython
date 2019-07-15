@@ -625,9 +625,19 @@ def generalizedExcelLoader(path, dataset = None, Integrate_on  = ("Experiment Nu
         return  None  #This should tell the user something is V wrong.
     return dataset
 
-def ArterialVenusAveraged(dataset=None, fields = []):
-    #This function replicates the part of the excel sheet that Dr g put in to choose the blood gas and TEG data. Much of that data doesnt care if it's Ao or Venous  so we average both together.
-    pass
+def ArterialVenusAveraged(dataset=None, fields = ['R', 'K', 'Angle', 'MA', 'PMA', 'G', 'EPL', 'A', 'CI', 'LY30' ], VenOrPA = 'Ven'):
+    #This function replicates the part of the excel sheet that Dr G put in to choose the blood gas and TEG data. Much of that data doesnt care if it's Ao or Venous  so we average both together.
+    #Just put the symbols that are outside of
+    for exp in dataset:
+        for field in fields:
+            AoData = exp[field + ' ' + 'Ao']
+            VenData = exp[field + ' ' + VenOrPA]
+            Add = AoData.add(VenData, fill_value=0)
+
+        #FUCKING ANNYED. Fix this dumbass shit.
+    return dataset
+
+
 
 
 if __name__ == "__main__":
@@ -645,7 +655,13 @@ if __name__ == "__main__":
     path = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\SA-1 Survival Phase (Master  Workbook) July 12 2019.xlsx"
     print(experiment_lst)
     Dataset = Parse_excel(path=path, Experiment_lst=experiment_lst)
+
     Ao = selectData(Dataset, returnLists=False)
+
+    #Default settings are for the TEG data.
+    Dataset = ArterialVenusAveraged(Dataset)
+    #Default settings are for the TEG data.
+    Dataset = ArterialVenusAveraged(Dataset, fields=[], VenOrPA='PA')
     # Run for KM analysis
     # survivalPlot(Dataset)
 
