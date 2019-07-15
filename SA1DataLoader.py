@@ -591,7 +591,43 @@ def MSCPlots(Dataset, makePlots = None):
             # more plots
             pass
 
+def generalizedExcelLoader(path, dataset = None, Integrate_on  = ("Experiment Number", 'experimentNumber') , AddFields = ['field1'] ):
+    #This function simply takes an excel sheet and reads it in. (defaulting to the first sheet)
+    #Then we extract the data into a dataframe and iterate through it, adding a new field to the dataset if there is a match between the experiment and integrate on.
+    #Integrate on is the holder for the field names we want to match between dataframes, it's a tuple with 2 values,
+    # the first is what the search field is called in the dataset, the second is the colunm from the data you want to match with
+    # TODO One issue is we are only able to match on experiment number here, but I don't expect to need to insert data on any other catagory
 
+    ExcelMatchField = Integrate_on[0]
+    DatasetMatchField = Integrate_on[1]
+
+    if dataset != None:
+        xls = pd.ExcelFile(DeathsClass)
+        df = pd.read_excel(xls)
+
+        for i, num in enumerate(df[ExcelMatchField]):
+            if not np.isnan(num):
+                match = []
+                for j, exp in enumerate(dataset):
+                    if int(exp[DatasetMatchField]) == int(num):
+                        match.append(j) #Store the index in the dataset list.
+
+                if len(match) == 1:
+                    # print("found match")
+                    #Now that we have a match, we can add the fields to the dict for the exp.
+                    for field in AddFields:
+                        dataset[j][field] = df[field].iloc[i]
+                else:
+                    print('No match found, either 0 or 2+')
+
+    else:
+        print("No dataset input to pair with.")
+        return  None  #This should tell the user something is V wrong.
+    return dataset
+
+def ArterialVenusAveraged(dataset=None, fields = []):
+    #This function replicates the part of the excel sheet that Dr g put in to choose the blood gas and TEG data. Much of that data doesnt care if it's Ao or Venous  so we average both together.
+    pass
 
 
 if __name__ == "__main__":
@@ -612,7 +648,16 @@ if __name__ == "__main__":
     Ao = selectData(Dataset, returnLists=False)
     # Run for KM analysis
     # survivalPlot(Dataset)
+
+    #This was for before we had the data divided into groups
     #Dataset = Randomize_groups(Dataset)
+
+    # integrate the deaths classifier
+    DeathsClass = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\Experimental Deaths Classification July 12.xlsx"
+
+
+    Dataset = generalizedExcelLoader(dataset=Dataset, path=DeathsClass, AddFields=['Hemodynamic', 'Neurologic'])
+
 
     #Run when you want to reproduce figures. I have a whole function set up to store those!
     # MSCPlots(Dataset)
@@ -629,6 +674,8 @@ if __name__ == "__main__":
     freq = 820  # Hz
     winsound.Beep(freq, duration)
     print("Program finished succesfully, that IS what you wanted right?")
+
+
 
 """
 This is a list of the fields we are using currently.
