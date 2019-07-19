@@ -16,6 +16,8 @@ import matplotlib.pyplot as plt
 import xlsxwriter as xlwrite
 import time, re, datetime, winsound
 import lifelines, sys, pdb
+import SA1DataManipulation
+
 
 def Parse_excel(path=None, Experiment_lst = ["2018124"]):
     #There were many formating decisions made to make the sheet more human readable.
@@ -25,7 +27,7 @@ def Parse_excel(path=None, Experiment_lst = ["2018124"]):
 
     t1, timeTotal = time.time() , time.time()
     xls = pd.ExcelFile(path)
-    df = pd.read_excel(xls, sheet_name=experiment_lst, header= None)
+    df = pd.read_excel(xls, sheet_name=Experiment_lst, header= None)
 
     print("loaded dataset from excel takes {0} seconds ".format(time.time() - t1))
 
@@ -591,6 +593,8 @@ def MSCPlots(Dataset, makePlots = None):
             # more plots
             pass
 
+
+
 def generalizedExcelLoader(path, dataset = None, Integrate_on  = ("Experiment Number", 'experimentNumber') , AddFields = ['field1'] ):
     #This function simply takes an excel sheet and reads it in. (defaulting to the first sheet)
     #Then we extract the data into a dataframe and iterate through it, adding a new field to the dataset if there is a match between the experiment and integrate on.
@@ -616,7 +620,11 @@ def generalizedExcelLoader(path, dataset = None, Integrate_on  = ("Experiment Nu
                     # print("found match")
                     #Now that we have a match, we can add the fields to the dict for the exp.
                     for field in AddFields:
-                        dataset[j][field] = df[field].iloc[i]
+                        #TODO Make this more general by letting the user spesfic if we are bool or continous, but if data is nan, we can just leave that.
+                        if not pd.isnull(df[field].iloc[i]):
+                            dataset[match[0]][field] = 'Y'
+                        else:
+                            dataset[match[0]][field] = np.nan
                 else:
                     print('No match found, either 0 or 2+')
 
@@ -625,6 +633,15 @@ def generalizedExcelLoader(path, dataset = None, Integrate_on  = ("Experiment Nu
         return  None  #This should tell the user something is V wrong.
     return dataset
 
+
+def AssignCausitiveSurvival(dataset):
+    #Weird non generalizable function.
+    #Need to generate a boolean series per experiment to push to SPSS for KM anaylsis.
+
+    #So the animals that survive to endpoint should be marked N, animals that are Hemodynamic deaths and nuero deaths should be marked Y, nuero
+    #So effetively this is an or statement. Maybe we can do in SPSS recode
+    pass
+
 def ArterialVenusAveraged(dataset=None, fields = ['R', 'K', 'Angle', 'MA', 'PMA', 'G', 'EPL', 'A', 'CI', 'LY30' ], VenOrPA = 'Ven'):
     #This function replicates the part of the excel sheet that Dr G put in to choose the blood gas and TEG data. Much of that data doesnt care if it's Ao or Venous  so we average both together.
     #Just put the symbols that are outside of
@@ -632,36 +649,55 @@ def ArterialVenusAveraged(dataset=None, fields = ['R', 'K', 'Angle', 'MA', 'PMA'
         for field in fields:
             AoData = exp[field + ' ' + 'Ao']
             VenData = exp[field + ' ' + VenOrPA]
-            Add = AoData.add(VenData, fill_value=0)
+            Outlist = []
+            for ix, Ao in AoData.iteritems():
+                if np.isnan(AoData[ix]) and np.isnan(VenData[ix]):
+                    Outlist.append(np.nan)
+                elif not np.isnan(AoData[ix]) and np.isnan(VenData[ix]):
+                    Outlist.append(AoData[ix])
+                elif np.isnan(AoData[ix]) and not np.isnan(VenData[ix]):
+                    Outlist.append(VenData[ix])
+                else:
+                    Outlist.append((AoData[ix] + VenData[ix])/2)
+            exp[field + ' ' + 'Ao' + ' or ' + VenOrPA] = pd.Series(Outlist)
 
-        #FUCKING ANNYED. Fix this dumbass shit.
     return dataset
 
-
-
-
-if __name__ == "__main__":
-
-
-    experiment_lst = np.arange(2018104,2018168+1) #Create a range of the experiment lists
-    censor = np.isin(experiment_lst,[2018112, 2018120, 2018123, 2018153, 2018156]) #Create a boolean mask to exclude censored exps from the lst.
-    censor = [not i for i in censor] #Invert the boolean mask
-    experiment_lst = experiment_lst[censor] #Drop censored exp numbers
-    experiment_lst = list(map(str, experiment_lst)) #Convert the list to strings
+def StandardLoadingFunction():
+    #Keep the standard loading code here so we can call it other places.
+    experiment_lst = np.arange(2018104, 2018168 + 1)  # Create a range of the experiment lists
+    censor = np.isin(experiment_lst, [2018112, 2018120, 2018123, 2018153,
+                                      2018156])  # Create a boolean mask to exclude censored exps from the lst.
+    censor = [not i for i in censor]  # Invert the boolean mask
+    experiment_lst = experiment_lst[censor]  # Drop censored exp numbers
+    experiment_lst = list(map(str, experiment_lst))  # Convert the list to strings
 
     # path = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\SA-1 Survival Phase (Master  Workbook) April 12, 2019 (masked).xlsx" #old data before groups became public.
     # path = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\SA-1 Survival Phase (Master  Workbook) April 23, 2019 (Check Values Fixed).xlsx"
     # path = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\SA-1 Survival Phase (Master  Workbook) May 2, 2019 (Check Values Fixed).xlsx"
-    path = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\SA-1 Survival Phase (Master  Workbook) July 12 2019.xlsx"
+    # path = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\SA-1 Survival Phase (Master  Workbook) July 12 2019.xlsx"
+    path = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\SA-1 Survival Phase (Master  Workbook Final) July 15 2019.xlsx"
+
     print(experiment_lst)
     Dataset = Parse_excel(path=path, Experiment_lst=experiment_lst)
+
+    return Dataset
+
+if __name__ == "__main__":
+
+    Dataset = StandardLoadingFunction()
 
     Ao = selectData(Dataset, returnLists=False)
 
     #Default settings are for the TEG data.
     Dataset = ArterialVenusAveraged(Dataset)
     #Default settings are for the TEG data.
-    Dataset = ArterialVenusAveraged(Dataset, fields=[], VenOrPA='PA')
+    Dataset = ArterialVenusAveraged(Dataset, fields=['tHg', 'O2Hb', 'COHb', 'MetHb', 'O2Ct', 'O2Cap', 'sO2', 'pH',
+                                                     'pCO2', 'pO2', 'BE', 'tCO2', 'HCO3', 'stHCO3', 'tHB', 'SO2', 'HCT',
+                                                     'Lactate'], VenOrPA='PA')
+
+
+
     # Run for KM analysis
     # survivalPlot(Dataset)
 
@@ -674,6 +710,8 @@ if __name__ == "__main__":
 
     Dataset = generalizedExcelLoader(dataset=Dataset, path=DeathsClass, AddFields=['Hemodynamic', 'Neurologic'])
 
+    #Add the ratio of blood withdrawn by wieght in KG and after the 30 min mark, use the estimated blood withdrawn.
+    Dataset = SA1DataManipulation.BloodWithdrawnPerKg(Dataset)
 
     #Run when you want to reproduce figures. I have a whole function set up to store those!
     # MSCPlots(Dataset)
