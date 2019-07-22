@@ -330,33 +330,41 @@ def SigmaPlotExport(Dataset=None):
     workbook = xlwrite.Workbook(path, {'nan_inf_to_errors': True})
     worksheet = workbook.add_worksheet()
 
-    # Write ALL the headers
-    # repeatFields = ['Time'] #Other repeated cols don't make sense here Unless i'm bad at sigma plot. I probably am.
-    Time = Dataset[0]['Time']
-    (row, col) = (1, 0)
-    Fields = ['Ao systolic', 'Ao systolic','Heart rate LV', 'ICP']
-    # exp = Dataset[3] #2018107 for testing. #silly me, I can't go exp by exp because I need summary stats.
+    #
 
-    array = np.empty(len(Time)*4, 1+(2*len(Fields))) * np.nan #Take that 4 out of there.
-
-    for ix, field in enumerate(Fields):
-        Data = selectData(Dataset, Key=field, returnLists=False)
-        #Average across group. Then stack them and write the entire column out #Get the standard error too for error bars.
-        Groups=[]
-        Times=[]
-        for group in Data.keys():
-            if ix == 0: #First field we have to do all the groups in one col, all the times in another and all the data in the third.
-                intervention = (cloneStringToList(group, len(Time))) #append the treatment group to the list first.
-                data = np.nanmean(Data[group], 0)
-                stdev = np.nanstd(Data[group], 0)/ Data['A'].shape[0]
-                # array[0:] # and then on not the first field we do the same thing with the rest of the averaged data.
+    #7/22/2019 Finally got the format that Dr.G wants for the sigmaplot data.
+    #He wants the time, mean of a group, SEM of a group, n of a group, repeat for all groups. Do not include time points that are nans.
 
 
-    #lets just get an array of the values and do a write_col at the end.
-    for col, data in enumerate(array):
-        worksheet.write_column(row, col, data)
 
-    workbook.close()
+    #See above, this was a first attempt I'll clean up when I have a working version.
+    # # Write ALL the headers
+    # # repeatFields = ['Time'] #Other repeated cols don't make sense here Unless i'm bad at sigma plot. I probably am.
+    # Time = Dataset[0]['Time']
+    # (row, col) = (1, 0)
+    # Fields = ['Ao systolic', 'Ao systolic','Heart rate LV', 'ICP']
+    # # exp = Dataset[3] #2018107 for testing. #silly me, I can't go exp by exp because I need summary stats.
+    #
+    # array = np.empty(len(Time)*4, 1+(2*len(Fields))) * np.nan #Take that 4 out of there.
+    #
+    # for ix, field in enumerate(Fields):
+    #     Data = selectData(Dataset, Key=field, returnLists=False)
+    #     #Average across group. Then stack them and write the entire column out #Get the standard error too for error bars.
+    #     Groups=[]
+    #     Times=[]
+    #     for group in Data.keys():
+    #         if ix == 0: #First field we have to do all the groups in one col, all the times in another and all the data in the third.
+    #             intervention = (cloneStringToList(group, len(Time))) #append the treatment group to the list first.
+    #             data = np.nanmean(Data[group], 0)
+    #             stdev = np.nanstd(Data[group], 0)/ Data['A'].shape[0]
+    #             # array[0:] # and then on not the first field we do the same thing with the rest of the averaged data.
+    #
+    #
+    # #lets just get an array of the values and do a write_col at the end.
+    # for col, data in enumerate(array):
+    #     worksheet.write_column(row, col, data)
+    #
+    # workbook.close()
 
 def DescriptivesExportLinked(Dataset): #TODO Dr.G wants descriptives that are interactive so if you change the sheet it will update the sumarry table and summarry stats.
     pass
@@ -664,7 +672,7 @@ def ArterialVenusAveraged(dataset=None, fields = ['R', 'K', 'Angle', 'MA', 'PMA'
     return dataset
 
 def StandardLoadingFunction():
-    #Keep the standard loading code here so we can call it other places.
+    #Keep the standard loading code here so we can easily call it other places.
     experiment_lst = np.arange(2018104, 2018168 + 1)  # Create a range of the experiment lists
     censor = np.isin(experiment_lst, [2018112, 2018120, 2018123, 2018153,
                                       2018156])  # Create a boolean mask to exclude censored exps from the lst.
@@ -684,6 +692,7 @@ def StandardLoadingFunction():
     return Dataset
 
 if __name__ == "__main__":
+
 
     Dataset = StandardLoadingFunction()
 
