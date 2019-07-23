@@ -82,10 +82,18 @@ def Drop_units(series):
     #Learning regex. Be Gentle.
     output = list()
     for entry in series:
+        # Find text between () that matches either OPTI or AVOX, it appears that we are overwriting some fields.
+        TechniqueLst = ['(OPTI)', '(AVOX)', '(OPTI ELYTE)']
+        Technique = re.search( '\(.*?\)', entry) #A match object for the first matching between pattern and the entry.
+
         entry = re.sub('\(.*?\)','', entry)#Remove all text between ()'s
         entry = re.sub(r',',' ', entry) #Remove commas replace with white space
         entry = re.sub(r'\s\s+', ' ', entry)  # Remove double white space
-        output.append(entry.strip())
+        if Technique.group(0) in TechniqueLst:
+            print('adding in the tech ()' + Technique.group(0) )
+            output.append(entry.strip()+' '+ Technique.group(0) )
+        else:
+            output.append(entry.strip())
         # print(entry)
     return pd.Series(output)
 
@@ -151,7 +159,7 @@ def selectData(Dataset, Key = 'Ao systolic', KeyType = None, groupBy = 'Interven
                 data[group] = np.nanstd(data[group], axis=0,ddof=1) / np.sqrt(np.sum(np.invert(np.isnan(data[group])), axis=0))
         return data #Send out the array if user doesn't want other ways of display.
     except:
-        print('Data could not be accessed appropiately.')
+        print('Data could not be accessed correctly.')
         return None
 
 
@@ -280,6 +288,7 @@ def SPSSExport(Dataset = None): #TODO. Fix the reapeat colunms. Annoying that it
     path = outpath +  'SPSSExport.xlsx'
     workbook = xlwrite.Workbook(path, {'nan_inf_to_errors': True})
     worksheet = workbook.add_worksheet()
+
     #Get all fields from the first dataset.
     fields = Dataset[0].keys()
 
@@ -353,26 +362,47 @@ def SigmaPlotExport(Dataset=None):
 
     #7/22/2019 Finally got the format that Dr.G wants for the sigmaplot data.
     #He wants the time, mean of a group, SEM of a group, n of a group, repeat for all groups. Do not include time points that are nans.
-    Time = Dataset[0]['Time'] #currently type list, could cast to pd.series so it's the same as the other values.
-    (row, col) = (0,0)
+
+    (Row, Col) = (0,0)
 
     groups = ['NS', 'TLP', 'POV', 'AVP'] #Dr.G made a totally arbitrary desision, but it important to remain consistant.
-    TypeList = []
-    # Develop a dict that has the indexes as a list for each group.
-    groupIdx = {key: [] for key in groups}
 
-    exp = Dataset[0]
+    # Arbitrary = selectData(Dataset)
+    # groups = Arbitrary.keys()
 
     #Export the data for survival anaylsis first.
 
-    #Export the data from the rest of the fields.
-    for field in exp.keys():
-        data = exp[field]
-        #Pull the data from each group as means, standard errors, or N.
-        #TODOThis requires refineing the select data method.
-        worksheet.write_column(row, col, data)
+    #Export the data from the rest of the fields. from the groups in order.
+    for field in Dataset[0].keys():
+        means = selectData(Dataset, Key=field, returnForm='means')
+        N = selectData(Dataset, Key=field, returnForm='N')
+        stdErr = selectData(Dataset, Key=field, returnForm='standardError')
 
+        if means is not None:
+            BoolArray = np.invert(np.isnan(means[groups[0]]))
+            if len(BoolArray.shape) == 0:
+                #Write out the single value field.
+                continue #Skip for now.
+            else:
+                Time = Dataset[0]['Time']
+                #write time gap, time, list the field, then go through the groups
+                Col += 1 #Gap column
+                worksheet.write_string(row=Row, col=Col, string='Time (min)')
+                worksheet.write_column(row=Row+1, col=Col, data=Time[BoolArray])
+                worksheet.write_string(row=Row, col=Col+1, string=field)
+                Col += 2
+
+                for group in groups:
+                    worksheet.write_string(row=Row, col=Col, string=(field + '-' + group +' means' ))
+                    worksheet.write_column(row=Row+1, col=Col, data=means[group][BoolArray])
+                    worksheet.write_string(row=Row, col=Col + 1, string=(field + '-' + group + ' StdError'))
+                    worksheet.write_column(row=Row+1, col=Col+1, data=stdErr[group][BoolArray])
+                    worksheet.write_string(row=Row, col=Col+2, string=(field + '-' + group + ' N'))
+                    worksheet.write_column(row=Row+1, col=Col+2, data=N[group][BoolArray])
+                    Col += 3
     workbook.close()
+
+
     #See above, this was a first attempt I'll clean up when I have a working version.
     # # Write ALL the headers
     # # repeatFields = ['Time'] #Other repeated cols don't make sense here Unless i'm bad at sigma plot. I probably am.

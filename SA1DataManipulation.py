@@ -8,7 +8,7 @@ def BloodWithdrawnPerKg(Dataset= None):
     #adds a new field to each experiment. 'BloodWithdrawnPerKg'
     if Dataset != None:
         for exp in Dataset:
-            print('experiment number ' + str(exp['experimentNumber']))
+            # print('experiment number ' + str(exp['experimentNumber']))
             BlWithEst = exp['Estimated blood loss']
             BlTrace = exp['Blood Removed'].copy()
             Time = exp['Time']
