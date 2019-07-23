@@ -102,7 +102,7 @@ def Randomize_groups(Dataset):
     #return Dataset #Intentionally broken to prevent dumb mistakes.
 
 
-def selectData(Dataset, Key = None, groupBy = None, averageGroups= True, returnLists = True):
+def selectData(Dataset, Key = 'Ao systolic', KeyType = None, groupBy = 'Intervention', returnForm = 'array'):
     #This function should iterate through all the data in the list and subselect the key of intrest and return it.
     #Organize by group, and then return a list of the data by group. If groupby is a key and not None then attempt to group by the ordinal values suggested by the input.
     #this should work on blocks for example. If averageGroups is False we will return a dataframe instead of a series.
@@ -110,31 +110,50 @@ def selectData(Dataset, Key = None, groupBy = None, averageGroups= True, returnL
     #TODO Start with a single Key. Eventually it would be SWEET to take Key as a list and call this function recursively!
     #Clarifying the output. We need to have a dict output. [Group A: Data A, Group B: Data B, Group C: Data C] Groups should either be dataframes or series depending on requested output
     #Dataframe seems like a bad fit here. Resorting to np.array().
+
+    #returnForm has 3 accepted values.
+    # 'means' means give just the mean value,
+    # 'array' means give back a numpy array that the user can do w/e with.
+    # 'standardError' is give back the standard error of each time point within the dataset.
+    # 'N' is give back the length of the array along the dim.
+
     groupNames = []
     data = dict()
-    if Key == None:
-        Key = 'Ao systolic'  #Resonable default
-    if groupBy == None:
-        GroupField = 'Intervention'  #Resonable default
-    else:
-        GroupField = groupBy
+
+    #If user doesn't spesifcy a type we should expect the data to be we have to check on one of the experiments to find the type it is.
+    # if KeyType == None:
+    #     sample = Dataset[1][Key]
+    #     samplenotnana = np.invert(np.isnan(sample))
+    #     # KeyType = type(sample.iloc[sampleIdx[]])
+
     for exp in Dataset:
-        if not exp[GroupField] in groupNames:  # if our treatment group hasn't been seen yet, add it.
-            groupNames.append(exp[GroupField]) #Add to group name since we haven't seen it before whatever type it is doesn't matter. y/n, int, catag
-            data[str((exp[GroupField]))] = []  # Create an empty list
+        if not exp[groupBy] in groupNames:  # if our treatment group hasn't been seen yet, add it.
+            groupNames.append(exp[groupBy]) #Add to group name since we haven't seen it before whatever type it is doesn't matter. y/n, int, catag
+            data[str((exp[groupBy]))] = []  # Create an empty list to placehold for the array.
             # print(groupNames)
         # print(str(exp['Intervention']) , '  ', str(exp[Key]) )
-        data[str((exp[GroupField]))].append(exp[Key])  #Add the data by appending it to the list that is the value of the dict.
+        data[str((exp[groupBy]))].append(exp[Key])  #Add the data by appending it to the list that is the value of the dict.
 
-    #TODO Average the data together and send the mean and stdev out, need another layer of dict?
 
-    if returnLists == False:
-        for key in data.keys():
-            #let numpy reform the data into an array. See what happens.
-            data[key] = np.array(data[key], dtype=np.float64)
-        return data
-    else:
-        return data
+
+    try:
+        for group in data.keys():
+            #Let numpy Cast the data into an array.
+            data[group] = np.array(data[group], dtype=np.float64) #Failure here means we shouldn't output anything. No number
+            if  returnForm == 'means':
+                #return means across the experiments.
+                data[group] = np.nanmean(data[group], axis=0)
+            elif returnForm == 'N':
+                #return the counts of observations across the group.
+                data[group] = np.sum(np.invert(np.isnan(data[group])), axis=0)
+            elif returnForm == 'standardError':
+                #Return the standard error of the mean. Sample std means ddof=1 for nanstd
+                data[group] = np.nanstd(data[group], axis=0,ddof=1) / np.sqrt(np.sum(np.invert(np.isnan(data[group])), axis=0))
+        return data #Send out the array if user doesn't want other ways of display.
+    except:
+        print('Data could not be accessed appropiately.')
+        return None
+
 
 def BoxPlot(Data):
     #Call with preselected data using select data function, The returnLists param should be set to True
@@ -264,7 +283,7 @@ def SPSSExport(Dataset = None): #TODO. Fix the reapeat colunms. Annoying that it
     #Get all fields from the first dataset.
     fields = Dataset[0].keys()
 
-    #Develop a list of interventions.
+    # Develop a list of interventions.
     groups = list(selectData(Dataset).keys())
     # Develop a dict that has the indexes as a list for each group.
     groupIdx = {key: [] for key in groups}
@@ -334,9 +353,26 @@ def SigmaPlotExport(Dataset=None):
 
     #7/22/2019 Finally got the format that Dr.G wants for the sigmaplot data.
     #He wants the time, mean of a group, SEM of a group, n of a group, repeat for all groups. Do not include time points that are nans.
+    Time = Dataset[0]['Time'] #currently type list, could cast to pd.series so it's the same as the other values.
+    (row, col) = (0,0)
 
+    groups = ['NS', 'TLP', 'POV', 'AVP'] #Dr.G made a totally arbitrary desision, but it important to remain consistant.
+    TypeList = []
+    # Develop a dict that has the indexes as a list for each group.
+    groupIdx = {key: [] for key in groups}
 
+    exp = Dataset[0]
 
+    #Export the data for survival anaylsis first.
+
+    #Export the data from the rest of the fields.
+    for field in exp.keys():
+        data = exp[field]
+        #Pull the data from each group as means, standard errors, or N.
+        #TODOThis requires refineing the select data method.
+        worksheet.write_column(row, col, data)
+
+    workbook.close()
     #See above, this was a first attempt I'll clean up when I have a working version.
     # # Write ALL the headers
     # # repeatFields = ['Time'] #Other repeated cols don't make sense here Unless i'm bad at sigma plot. I probably am.
@@ -642,13 +678,6 @@ def generalizedExcelLoader(path, dataset = None, Integrate_on  = ("Experiment Nu
     return dataset
 
 
-def AssignCausitiveSurvival(dataset):
-    #Weird non generalizable function.
-    #Need to generate a boolean series per experiment to push to SPSS for KM anaylsis.
-
-    #So the animals that survive to endpoint should be marked N, animals that are Hemodynamic deaths and nuero deaths should be marked Y, nuero
-    #So effetively this is an or statement. Maybe we can do in SPSS recode
-    pass
 
 def ArterialVenusAveraged(dataset=None, fields = ['R', 'K', 'Angle', 'MA', 'PMA', 'G', 'EPL', 'A', 'CI', 'LY30' ], VenOrPA = 'Ven'):
     #This function replicates the part of the excel sheet that Dr G put in to choose the blood gas and TEG data. Much of that data doesnt care if it's Ao or Venous  so we average both together.
@@ -693,19 +722,16 @@ def StandardLoadingFunction():
 
 if __name__ == "__main__":
 
-
     Dataset = StandardLoadingFunction()
 
-    Ao = selectData(Dataset, returnLists=False)
+    Ao = selectData(Dataset)
 
-    #Default settings are for the TEG data.
+    #Default settings are for the TEG data, take either or.
     Dataset = ArterialVenusAveraged(Dataset)
     #Default settings are for the TEG data.
     Dataset = ArterialVenusAveraged(Dataset, fields=['tHg', 'O2Hb', 'COHb', 'MetHb', 'O2Ct', 'O2Cap', 'sO2', 'pH',
                                                      'pCO2', 'pO2', 'BE', 'tCO2', 'HCO3', 'stHCO3', 'tHB', 'SO2', 'HCT',
                                                      'Lactate'], VenOrPA='PA')
-
-
 
     # Run for KM analysis
     # survivalPlot(Dataset)
@@ -722,19 +748,21 @@ if __name__ == "__main__":
     #Add the ratio of blood withdrawn by wieght in KG and after the 30 min mark, use the estimated blood withdrawn.
     Dataset = SA1DataManipulation.BloodWithdrawnPerKg(Dataset)
 
+    # Run to produce an xlsx file for Sigma plot. Right now just do it for Ao.
+    # SigmaPlotExport(Dataset)
+
     #Run when you want to reproduce figures. I have a whole function set up to store those!
     # MSCPlots(Dataset)
     #Run to produce an xlsx file for spss to import.
     SPSSExport(Dataset)
-    #Run to produce an xlsx file for Sigma plot. Right now just do it for Ao.
-    # SigmaPlotExport(Dataset)
-
+    #Run to produce an xlsx file for Sigma plot.
+    SigmaPlotExport(Dataset)
     #Produce the descriptives sheet for easy identification of outlier values.
     DescriptivesExport(Dataset)
 
     #Make a sound when program finsishes so I know it's done!
     duration = 500  # milliseconds
-    freq = 820  # Hz
+    freq = 450  # Hz
     winsound.Beep(freq, duration)
     print("Program finished succesfully, that IS what you wanted right?")
 
