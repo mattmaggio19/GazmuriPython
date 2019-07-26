@@ -17,6 +17,8 @@ import xlsxwriter as xlwrite
 import time, re, datetime, winsound
 import lifelines, sys, pdb
 import SA1DataManipulation
+import pickle
+import os
 
 
 def Parse_excel(path=None, Experiment_lst = ["2018124"]):
@@ -25,12 +27,9 @@ def Parse_excel(path=None, Experiment_lst = ["2018124"]):
     #Output is going to be a dict for each experiment that has key value pairs and pd.series of data as outputs.
     #later I think I can pile all of this into a giant dataframe or I can have a subselection function to go through and pull the data I need using a loop.
 
-    t1, timeTotal = time.time() , time.time()
+
     xls = pd.ExcelFile(path)
     df = pd.read_excel(xls, sheet_name=Experiment_lst, header= None)
-
-    print("loaded dataset from excel takes {0} seconds ".format(time.time() - t1))
-
 
     Output_lst = []
 
@@ -46,8 +45,14 @@ def Parse_excel(path=None, Experiment_lst = ["2018124"]):
         UVal = pd.concat([df_exp.iloc[slice_lst[0],4], df_exp.iloc[slice_lst[1],4]])
         Udict = dict(zip(UVar, UVal))
 
+
+
         # Time values are known a priori
         Time = np.concatenate([np.arange(0, 20, 5), np.arange(30, 240+15, 15), np.arange(8 * 60, (72+4) * 60, 4 * 60)])
+
+        # Special one off to get the hespand delievered in a time resolved manner.
+        HesDelivered = df_exp.iloc[19, slice(5, 6 + 35)]
+
 
         #Get the Repeditive var names and data. Similar to above.
         indexX = [slice(33,63), slice(64, 74), slice(86, 104), slice(105, 123),  slice(128, 137), slice(138, 147), slice(158, 179), slice(180, 197) ]
@@ -71,10 +76,11 @@ def Parse_excel(path=None, Experiment_lst = ["2018124"]):
         #Add a few more fields and then stack up into a list to complete the experiment loading
         ExpDict["experimentNumber"] = exp
         ExpDict["Time"] = Time
-        print("Experiment {0} Loaded and Parsed taking {1}".format(exp, time.time()-t1))
+        ExpDict['HESDelivered'] = HesDelivered
+        # print("Experiment {0} Loaded and Parsed taking {1}".format(exp, time.time()-t1))
         Output_lst.append(ExpDict)
         print("done")
-    print("Total Dataset processed in {0} seconds".format(time.time() - timeTotal))
+
     return Output_lst
 
 def Drop_units(series):
@@ -89,9 +95,12 @@ def Drop_units(series):
         entry = re.sub('\(.*?\)','', entry)#Remove all text between ()'s
         entry = re.sub(r',',' ', entry) #Remove commas replace with white space
         entry = re.sub(r'\s\s+', ' ', entry)  # Remove double white space
-        if Technique.group(0) in TechniqueLst:
-            print('adding in the tech ()' + Technique.group(0) )
-            output.append(entry.strip()+' '+ Technique.group(0) )
+        if not Technique is None:
+            if Technique.group(0) in TechniqueLst:
+                # print('adding in the tech ()' + Technique.group(0) )
+                output.append(entry.strip()+' '+ Technique.group(0) )
+            else:
+                output.append(entry.strip())
         else:
             output.append(entry.strip())
         # print(entry)
@@ -372,6 +381,8 @@ def SigmaPlotExport(Dataset=None):
 
     #Export the data for survival anaylsis first.
 
+
+
     #Export the data from the rest of the fields. from the groups in order.
     for field in Dataset[0].keys():
         means = selectData(Dataset, Key=field, returnForm='means')
@@ -400,6 +411,9 @@ def SigmaPlotExport(Dataset=None):
                     worksheet.write_string(row=Row, col=Col+2, string=(field + '-' + group + ' N'))
                     worksheet.write_column(row=Row+1, col=Col+2, data=N[group][BoolArray])
                     Col += 3
+    # Export the Neurological test data last, some reformatting is required.
+
+
     workbook.close()
 
 
@@ -707,15 +721,24 @@ def generalizedExcelLoader(path, dataset = None, Integrate_on  = ("Experiment Nu
         return  None  #This should tell the user something is V wrong.
     return dataset
 
+def DataFrameExport():
+    #TODO Reform the data as a pandas dataframe. Small project.
+    pass
 
-
-def ArterialVenusAveraged(dataset=None, fields = ['R', 'K', 'Angle', 'MA', 'PMA', 'G', 'EPL', 'A', 'CI', 'LY30' ], VenOrPA = 'Ven'):
+def ArterialVenusAveraged(dataset=None, fields = ['R', 'K', 'Angle', 'MA', 'PMA', 'G', 'EPL', 'A', 'CI', 'LY30' ], VenOrPA = 'Ven', Technique = ''):
     #This function replicates the part of the excel sheet that Dr G put in to choose the blood gas and TEG data. Much of that data doesnt care if it's Ao or Venous  so we average both together.
     #Just put the symbols that are outside of
+
+    #Need to keep the technique that the measurement came from straight.
+    if Technique != '':
+        TechniqueSpace = ' ' + Technique
+    else:
+        TechniqueSpace = ''
+
     for exp in dataset:
         for field in fields:
-            AoData = exp[field + ' ' + 'Ao']
-            VenData = exp[field + ' ' + VenOrPA]
+            AoData = exp[field + ' ' + 'Ao' + TechniqueSpace ]
+            VenData = exp[field + ' ' + VenOrPA + TechniqueSpace]
             Outlist = []
             for ix, Ao in AoData.iteritems():
                 if np.isnan(AoData[ix]) and np.isnan(VenData[ix]):
@@ -726,42 +749,92 @@ def ArterialVenusAveraged(dataset=None, fields = ['R', 'K', 'Angle', 'MA', 'PMA'
                     Outlist.append(VenData[ix])
                 else:
                     Outlist.append((AoData[ix] + VenData[ix])/2)
-            exp[field + ' ' + 'Ao' + ' or ' + VenOrPA] = pd.Series(Outlist)
+            exp[field + ' ' + 'Ao' + ' or ' + VenOrPA + TechniqueSpace ] = pd.Series(Outlist)
 
     return dataset
 
-def StandardLoadingFunction():
-    #Keep the standard loading code here so we can easily call it other places.
-    experiment_lst = np.arange(2018104, 2018168 + 1)  # Create a range of the experiment lists
-    censor = np.isin(experiment_lst, [2018112, 2018120, 2018123, 2018153,
-                                      2018156])  # Create a boolean mask to exclude censored exps from the lst.
-    censor = [not i for i in censor]  # Invert the boolean mask
-    experiment_lst = experiment_lst[censor]  # Drop censored exp numbers
-    experiment_lst = list(map(str, experiment_lst))  # Convert the list to strings
+def StandardLoadingFunction(useCashe = False):
 
-    # path = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\SA-1 Survival Phase (Master  Workbook) April 12, 2019 (masked).xlsx" #old data before groups became public.
-    # path = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\SA-1 Survival Phase (Master  Workbook) April 23, 2019 (Check Values Fixed).xlsx"
-    # path = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\SA-1 Survival Phase (Master  Workbook) May 2, 2019 (Check Values Fixed).xlsx"
-    # path = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\SA-1 Survival Phase (Master  Workbook) July 12 2019.xlsx"
-    path = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\SA-1 Survival Phase (Master  Workbook Final) July 15 2019.xlsx"
+    # Timing function
+    t1, timeTotal = time.time(), time.time()
+    #Figure out if a cashe file exists.
+    CasheFilename = 'Sa1Dataset.pickle'
 
-    print(experiment_lst)
-    Dataset = Parse_excel(path=path, Experiment_lst=experiment_lst)
+    CasheExists = os.path.exists(os.path.join('cashe',CasheFilename))
+
+    if not useCashe or not CasheExists:
+        print('loading dataset fresh from on disk ')
+
+
+        #Keep the standard loading code here so we can easily call it other places.
+        experiment_lst = np.arange(2018104, 2018168 + 1)  # Create a range of the experiment lists
+        censor = np.isin(experiment_lst, [2018112, 2018120, 2018123, 2018153,
+                                          2018156])  # Create a boolean mask to exclude censored exps from the lst.
+
+        censor = [not i for i in censor]  # Invert the boolean mask
+        experiment_lst = experiment_lst[censor]  # Drop censored exp numbers
+        experiment_lst = list(map(str, experiment_lst))  # Convert the list to strings
+
+        # path = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\SA-1 Survival Phase (Master  Workbook) April 12, 2019 (masked).xlsx" #old data before groups became public.
+        # path = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\SA-1 Survival Phase (Master  Workbook) April 23, 2019 (Check Values Fixed).xlsx"
+        # path = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\SA-1 Survival Phase (Master  Workbook) May 2, 2019 (Check Values Fixed).xlsx"
+        # path = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\SA-1 Survival Phase (Master  Workbook) July 12 2019.xlsx"
+        path = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\SA-1 Survival Phase (Master  Workbook Final) July 15 2019.xlsx"
+        print(' Loading from ' + path)
+
+        # print(experiment_lst)
+
+        Dataset = Parse_excel(path=path, Experiment_lst=experiment_lst)
+
+        print("Total Dataset Loaded and processed in {0} seconds".format(time.time() - timeTotal))
+
+        print('Taking averages for the bloodwork data where Ao and Venus data exist, combining where they are exclusive.')
+        # Default settings are for the TEG data, take either or.
+        Dataset = ArterialVenusAveraged(Dataset)
+        # Default settings are for the TEG data. #Had to change the strings to match the new (OPTI) field format.
+        Dataset = ArterialVenusAveraged(Dataset, fields=['tHg', 'O2Hb', 'COHb', 'MetHb', 'O2Ct', 'O2Cap', 'sO2'],
+                                        VenOrPA='PA', Technique='(AVOX)')
+        Dataset = ArterialVenusAveraged(Dataset,
+                                        fields=['pH', 'pCO2', 'pO2', 'BE', 'tCO2', 'HCO3', 'stHCO3', 'tHB', 'SO2', 'HCT',
+                                                'Lactate'], VenOrPA='PA', Technique='(OPTI)')
+        Dataset = ArterialVenusAveraged(Dataset,
+                                        fields=['pH', 'tCO2', 'HCO3', 'Na+', 'K+', 'Cl-', 'Ca++', 'AnGap', 'nCa++'],
+                                        Technique='(OPTI ELYTE)')
+        print("Bloodwork averages done at in {0} seconds".format(time.time() - timeTotal))
+
+        # Save the dataset to the cashe. (Maybe date the cashes, or that might lead to file inflation.
+        print('Cashing dataset to disk.')
+        with open(os.path.join('cashe', CasheFilename), 'wb') as f:
+            pickle.dump(Dataset, f)
+            print('Cashe dumped to disk  in {0} '.format(time.time() - timeTotal))
+
+    elif not CasheExists:
+        os.mkdir(os.path.join('cashe'))
+        print('Call loader recursively to refresh Cashe.')
+        StandardLoadingFunction(useCashe=False)
+
+    else:
+        #Load the dataset from disk.
+        with open(os.path.join('cashe',CasheFilename), 'rb') as f:
+                Dataset = pickle.load(f)
+                print('Cashe loaded from disk  in {0} '.format(time.time() - timeTotal))
 
     return Dataset
 
 if __name__ == "__main__":
 
-    Dataset = StandardLoadingFunction()
+    Dataset = StandardLoadingFunction(useCashe=False)
 
     Ao = selectData(Dataset)
 
-    #Default settings are for the TEG data, take either or.
-    Dataset = ArterialVenusAveraged(Dataset)
-    #Default settings are for the TEG data.
-    Dataset = ArterialVenusAveraged(Dataset, fields=['tHg', 'O2Hb', 'COHb', 'MetHb', 'O2Ct', 'O2Cap', 'sO2', 'pH',
-                                                     'pCO2', 'pO2', 'BE', 'tCO2', 'HCO3', 'stHCO3', 'tHB', 'SO2', 'HCT',
-                                                     'Lactate'], VenOrPA='PA')
+    #
+    # #Get a dataframe together for one variable. SelectData doesn't really work for this.
+    # frameLst = []
+    #
+    # for group in Ao.keys():
+    #     frameLst.append(pd.DataFrame(data= np.transpose(Ao[group]), index=Time))
+    # dfTot = pd.join(frameLst, keys= Ao.keys())
+
 
     # Run for KM analysis
     # survivalPlot(Dataset)
@@ -778,8 +851,7 @@ if __name__ == "__main__":
     #Add the ratio of blood withdrawn by wieght in KG and after the 30 min mark, use the estimated blood withdrawn.
     Dataset = SA1DataManipulation.BloodWithdrawnPerKg(Dataset)
 
-    # Run to produce an xlsx file for Sigma plot. Right now just do it for Ao.
-    # SigmaPlotExport(Dataset)
+
 
     #Run when you want to reproduce figures. I have a whole function set up to store those!
     # MSCPlots(Dataset)
@@ -799,8 +871,7 @@ if __name__ == "__main__":
 
 
 """
-This is a list of the fields we are using currently.
-
+This is a list of the fields we are using currently. 7/22/19
 Date
 Series
 Block
@@ -864,57 +935,60 @@ EPL Ven
 A Ven
 CI Ven
 LY30 Ven
-tHg Ao
-O2Hb Ao
-COHb Ao
-MetHb Ao
-O2Ct Ao
-O2Cap Ao
-sO2 Ao
-pH Ao
-pCO2 Ao
-pO2 Ao
-BE Ao
-tCO2 Ao
-HCO3 Ao
-stHCO3 Ao
-tHB Ao
-SO2 Ao
-HCT Ao
-Lactate Ao
-tHg PA
-O2Hb PA
-COHb PA
-MetHb PA
-O2Ct PA
-O2Cap PA
-sO2 PA
-pH PA
-pCO2 PA
-pO2 PA
-BE PA
-tCO2 PA
-HCO3 PA
-stHCO3 PA
-tHB PA
-SO2 PA
-HCT PA
-Lactate PA
-Na+ Ao
-K+ Ao
-Cl- Ao
-Ca++ Ao
-AnGap Ao
-nCa++ Ao
-pH Ven
-tCO2 Ven
-HCO3 Ven
-Na+ Ven
-K+ Ven
-Cl- Ven
-Ca++ Ven
-AnGap Ven
-nCa++ Ven
+tHg Ao (AVOX)
+O2Hb Ao (AVOX)
+COHb Ao (AVOX)
+MetHb Ao (AVOX)
+O2Ct Ao (AVOX)
+O2Cap Ao (AVOX)
+sO2 Ao (AVOX)
+pH Ao (OPTI)
+pCO2 Ao (OPTI)
+pO2 Ao (OPTI)
+BE Ao (OPTI)
+tCO2 Ao (OPTI)
+HCO3 Ao (OPTI)
+stHCO3 Ao (OPTI)
+tHB Ao (OPTI)
+SO2 Ao (OPTI)
+HCT Ao (OPTI)
+Lactate Ao (OPTI)
+tHg PA (AVOX)
+O2Hb PA (AVOX)
+COHb PA (AVOX)
+MetHb PA (AVOX)
+O2Ct PA (AVOX)
+O2Cap PA (AVOX)
+sO2 PA (AVOX)
+pH PA (OPTI)
+pCO2 PA (OPTI)
+pO2 PA (OPTI)
+BE PA (OPTI)
+tCO2 PA (OPTI)
+HCO3 PA (OPTI)
+stHCO3 PA (OPTI)
+tHB PA (OPTI)
+SO2 PA (OPTI)
+HCT PA (OPTI)
+Lactate PA (OPTI)
+pH Ao (OPTI ELYTE)
+tCO2 Ao (OPTI ELYTE)
+HCO3 Ao (OPTI ELYTE)
+Na+ Ao (OPTI ELYTE)
+K+ Ao (OPTI ELYTE)
+Cl- Ao (OPTI ELYTE)
+Ca++ Ao (OPTI ELYTE)
+AnGap Ao (OPTI ELYTE)
+nCa++ Ao (OPTI ELYTE)
+pH Ven (OPTI ELYTE)
+tCO2 Ven (OPTI ELYTE)
+HCO3 Ven (OPTI ELYTE)
+Na+ Ven (OPTI ELYTE)
+K+ Ven (OPTI ELYTE)
+Cl- Ven (OPTI ELYTE)
+Ca++ Ven (OPTI ELYTE)
+AnGap Ven (OPTI ELYTE)
+nCa++ Ven (OPTI ELYTE)
 BSA
 Hufner's Number
 Ao mean
@@ -951,6 +1025,41 @@ Food acquisition test error score 5
 Novel object discrimination index
 experimentNumber
 Time
-
+R Ao or Ven
+K Ao or Ven
+Angle Ao or Ven
+MA Ao or Ven
+PMA Ao or Ven
+G Ao or Ven
+EPL Ao or Ven
+A Ao or Ven
+CI Ao or Ven
+LY30 Ao or Ven
+tHg Ao or PA
+O2Hb Ao or PA
+COHb Ao or PA
+MetHb Ao or PA
+O2Ct Ao or PA
+O2Cap Ao or PA
+sO2 Ao or PA
+pH Ao or PA
+pCO2 Ao or PA
+pO2 Ao or PA
+BE Ao or PA
+tCO2 Ao or PA
+HCO3 Ao or PA
+stHCO3 Ao or PA
+tHB Ao or PA
+SO2 Ao or PA
+HCT Ao or PA
+Lactate Ao or PA
+pH Ao or Ven
+tCO2 Ao or Ven
+HCO3 Ao or Ven
+Na+ Ao or Ven
+K+ Ao or Ven
+Cl- Ao or Ven
+Ca++ Ao or Ven
+AnGap Ao or Ven
+nCa++ Ao or Ven
 """
-

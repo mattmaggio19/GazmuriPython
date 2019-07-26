@@ -2,7 +2,7 @@
 
 
 #This file is for functions that actually change or calculate other parameters from the SA-1 study.
-# Hopefully these funciton are general enough to be useful.
+# Hopefully these funciton are general enough to be useful. I actually ended up doing this in the spss syntax.
 
 def BloodWithdrawnPerKg(Dataset= None):
     #adds a new field to each experiment. 'BloodWithdrawnPerKg'
