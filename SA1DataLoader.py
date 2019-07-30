@@ -380,8 +380,28 @@ def SigmaPlotExport(Dataset=None):
     # groups = Arbitrary.keys()
 
     #Export the data for survival anaylsis first.
+    Col += 2
 
+    # Export the HES admin data
+    Time = Dataset[0]['Time']
+    DoseRatio = SA1DataManipulation.ResolvedHESAdministration(Dataset, output='ratio', graph = False)
+    DoseRatioN = SA1DataManipulation.ResolvedHESAdministration(Dataset, output='possibleDoses', graph = False)
+    CheckTimes = [30, 120, 240, 8 * 60, 12 * 60, 16 * 60, 20 * 60, 24 * 60]
+    worksheet.write_string(row=Row, col=Col, string=('Time'))
+    worksheet.write_column(row=Row + 1, col=Col, data=CheckTimes)
 
+    Bothsets = set(CheckTimes).intersection(Time)
+    indices = [list(Time).index(x) for x in Bothsets]
+    Col += 1
+    for group in groups:
+        worksheet.write_string(row=Row, col=Col, string=('HES ratio ' + '-' + group ))
+        worksheet.write_column(row=Row + 1, col=Col, data=DoseRatio[group][sorted(indices)])
+        worksheet.write_string(row=Row, col=Col + 1, string=('BLANK  ' + '-' + group ))
+        worksheet.write_column(row=Row + 1, col=Col + 1, data=[])
+        worksheet.write_string(row=Row, col=Col + 2, string=('HES doses possible' + '-' + group + ' N'))
+        worksheet.write_column(row=Row + 1, col=Col + 2, data=DoseRatioN[group][sorted(indices)])
+        Col += 3
+    Col += 1
 
     #Export the data from the rest of the fields. from the groups in order.
     for field in Dataset[0].keys():

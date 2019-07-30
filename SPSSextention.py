@@ -7,6 +7,7 @@ import SA1DataLoader
 #Code to help deal with some of the syntax issues, DR.G wants to run the mixed model on every single rep parameter
 
 
+
 def GeneralizedCopyFunction(Dataset, Path, ReplaceString = 'Aomean' , ExcludeFields = ['Date', 'Series', 'Time', 'Block', 'Intervention', 'Weight',
                                                                                        'Time ketamine injection', 'Time LL / TBI', 'Preparation time','Survival time','Survival 240 minutes',
                                                                                        'Survival 72 hours', 'Liver Lacerations', 'Estimated blood loss', 'Impactor depth', 'Impactor speed',

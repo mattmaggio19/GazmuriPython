@@ -1,6 +1,6 @@
 import os, time
 from sklearn import linear_model, preprocessing
-
+from collections import OrderedDict
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -13,6 +13,12 @@ def frange(start, stop, step):
 
 
 def LoadLabviewData(path=None, samplingRate = 250, headers = 5):
+    # This is the most important method here, Gazmuri's labveiw system dumps the data to a file without timestamps on the datasamples, the headers are what is inside the colunms.
+    # We can use this to load to a dataframe, but I never resolved how to stitch them together in a time resolved manner.
+
+    #TODO finish this and make it robust to different experiments.
+
+
     #Open with builtin loader to determine number of lines in file.
     with open(path) as f:
         size = sum(1 for _ in f)
@@ -235,6 +241,78 @@ def ICPSpikeAnalysis(df):
     # res['cycle_frac'] = thetaAtPoint(res['amp'], res['omega'], res['phase'], res['offset'] , df["Time"][ICP_spike])
     # return res
     return (slope, percentIntoCycle)
+
+
+def Parse_experiment_dir(dirpath):
+    #Todo Basically I want this function to return a collection of the paths to the raw data files in the directory.
+    # If we return a list, it should be a tuple of two lists with the first as the experiment time the file starts, and the second as a list of the paths.
+    # However, it's probably better to use an ordered dict. The order of the dict is therefore the order of the
+    # date modified of the files and then the key is the time point the file is assosated with.
+    #Logic to decide based on filename what it is.
+    #Return ordered Dict. look for information under ['metadata']
+    dirLst = getfiles(dirpath)
+    od = OrderedDict()
+    od['metadata'] = dict()
+    od['metadata']['expPath'] = dirpath
+    #need a few flags for logical reasons.
+    BaselineN = 0
+    ExpStart = False
+
+    for file in dirLst:
+        if 'BL' in file: #Must be a baseline file
+            print('Baseline found  '  + file)
+
+        elif 'Time' in file: # must be an Experimental file
+            if 'Time 0-10' in file: # must be the first experimental data file, unless we had a false start experiment thing that happened once or twice. use a flag to mark.
+                if ExpStart is False:
+                    (key, filetime) = getFileLabel(file)
+                    od[key] = file #Store the file under the key for experiment time.
+                    ExpStart = True
+                    od['metadata']['ExperimentStart'] = filetime
+                elif True: #TODO Determine if we had a false start or we restart the exp after 240 to keep recording during second surgery. Take corrective action
+
+                    pass
+            else:
+                (key, timestamp) = getFileLabel(file)
+                od[key] = file
+
+            print('Experiment file found  '  + file)
+        elif 'Experiment' in file:
+            print('Experiment Log found '  + file)
+        elif 'EVENTS' in file:
+            print('EVENT Log found  '  + file)
+
+    #Test code for display
+    for key in od.keys():
+        print(key)
+        print(od[key])
+        for field in od['metadata']:
+            print('Printing Metadata')
+            print(field)
+            print(od['metadata'][field])
+
+def getFileLabel(String, fileType = 'exp'):
+    # Takes the experimental filename and produces the best label for it. May not actually need a function for this. This might get annoying.
+    #return a tuple of the string to write as the key for the OD from above and the datetime object for the thingy.
+    if fileType == 'exp':
+        split = String.split(' ')
+        if split[1] == '10-30':
+            format = '%m-%d-%y %I:%M:%S %p'
+            date = split[2] + ' ' + split[4] + ':' + split[5] + ':' + split[6] + ' ' + split[7]
+            return ('20-30', datetime.datetime.strptime(date,format))
+        else:
+            format = '%m-%d-%y %I:%M:%S %p'
+            date = split[2] + ' ' + split[4] + ':' + split[5] + ':' + split[6]+ ' ' + split[7]
+            return (split[1], datetime.datetime.strptime(date,format))
+    elif fileType == 'Baseline':
+        pass
+
+
+def getfiles(dirpath): #Pulled from stack overflow, returns files sorted by last time modified.
+    a = [s for s in os.listdir(dirpath)
+         if os.path.isfile(os.path.join(dirpath, s))]
+    a.sort(key=lambda s: os.path.getmtime(os.path.join(dirpath, s)))
+    return a
 
 if __name__ == "__main__":
     #Get an excel sheet with the paths to all the ICP spike height data.
