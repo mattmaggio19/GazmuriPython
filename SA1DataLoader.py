@@ -289,10 +289,26 @@ def cloneStringToList(string, N):
     lst.pop(-1)
     return lst
 
+def DateTimesToStr(Dataset = None):
+    #This function is simple, it changes datatimes to simple strings to export to other programs, If they are ever important we can modify this.
+    for exp in Dataset:
+        for field in exp.keys():
+            data = exp[field]
+            # print(type(data))
+            if type(data) == type(datetime.datetime.now()):
+                print('found a datetime obj ' + field + ' of type '+ str(type(data)))
+                exp[field] = str(data.strftime('%d/%m/%Y %H:%M:%S')) #Cast into a string var
+            elif type(data) == type(datetime.time()):
+                print('found a datetime obj ' + field + ' of type '+ str(type(data)))
+                exp[field] = str(data.strftime('%H:%M:%S')) #Cast into a string var
+    return Dataset
 
-def SPSSExport(Dataset = None): #TODO. Fix the reapeat colunms. Annoying that it keeps breaking.
-    #SPSS has weird needs for data, but It shouldn't be that hard to output in a form. I quoted dr.G 4 hours. I can probably do it in one if I get my ass in gear.
-    #4 Hours later. Still plugging holes.
+def SPSSExport(Dataset = None):
+    #Export all data to SPSS form, for repeated measurements they must be broken out into rows such that each animal and timepoint has a row or case.
+    #Initially it was unclear which varibles need to be repeated in each case belonging to an animal, The basic survival and mixed models can be run only copying
+    #The experiment number and Intervention so that each animal and group can be kept distinct. According to Dr.Miller, to use the cox proportional hazard model, the covariate needs to be copied into each case row for each animal.
+    #Now this isn't a huge deal, but considering that we want to extract each of the baseline values for use as a fixed factor or predictive of surival, it is going to lead to a huge inflation of the spss dataset.
+    #
     outpath = r'C:\Users\mattm\PycharmProjects\GazmuriDataLoader\Export\\'
     path = outpath +  'SPSSExport.xlsx'
     workbook = xlwrite.Workbook(path, {'nan_inf_to_errors': True})
@@ -301,33 +317,33 @@ def SPSSExport(Dataset = None): #TODO. Fix the reapeat colunms. Annoying that it
     #Get all fields from the first dataset.
     fields = Dataset[0].keys()
 
-    # Develop a list of interventions.
-    groups = list(selectData(Dataset).keys())
-    # Develop a dict that has the indexes as a list for each group.
-    groupIdx = {key: [] for key in groups}
-    for idx, data in enumerate(Dataset):
-        groupIdx[str(data['Intervention'])].append(idx)
+    #Use the groups in the same order as the other export functions.
+    groups = ['NS', 'TLP', 'POV', 'AVP']
+
+    # # Develop a list of interventions. More general, don't control the order though.
+    # groups = list(selectData(Dataset).keys())
+    # # Develop a dict that has the indexes as a list for each group.
+    # groupIdx = {key: [] for key in groups}
+    # for idx, data in enumerate(Dataset):
+    #     groupIdx[str(data['Intervention'])].append(idx)
 
     # Write ALL the headers
     repeatFields = ['Time', 'experimentNumber', 'Intervention', 'Block']
     for idx, field in enumerate(repeatFields):  # Write the repeated fields as headers
         worksheet.write(0, idx, field)
 
-
-
-
     (row, col) = (1, 0)  # Where to start counting from for the data, if you are going to have repeats like time and exp num they have to be factored in.
 
     # exp = Dataset[3]    #Start with 2018107
     for ix, expReal in enumerate(Dataset):
 
-        exp = expReal.copy() #Apparently pop removes it from the actual object in memory. LAME.
+        exp = expReal.copy() #Apparently pop removes it from the actual object in memory. LAME but nessasary.
 
         if ix == 0:
             for idx, field in enumerate(fields):  # Write the rest of the headers fields as headers
                 worksheet.write(0, idx+len(repeatFields), field)
 
-        #Format the repeating fields here.  #Make this a loop, for now just add reapeat fields here.
+        #Format the repeating fields here.  #Make this a loop, for now just add reapeat fields here one at a time. turns out this isn't super nessasary, kinda nice to have these first though.
         Time = exp['Time']
         expNum = cloneStringToList(exp['experimentNumber'], len(Time))
         intervention = cloneStringToList(exp['Intervention'], len(Time))
@@ -344,6 +360,11 @@ def SPSSExport(Dataset = None): #TODO. Fix the reapeat colunms. Annoying that it
 
         fields = exp.keys()
         for idx, field in enumerate(fields):
+            if type(exp[field]) == type(float()):  #For all single measurements, turn them into repeating measurements here.
+                array.append(cloneStringToList(str(round(exp[field],2)), len(Time)))
+            elif not type(exp[field]) == type(pd.Series()):
+                array.append(cloneStringToList(str(exp[field]),len(Time)))
+            else:
                 array.append(exp[field])
 
         #lets just get an array of the values and do a write_col at the end.
@@ -379,10 +400,11 @@ def SigmaPlotExport(Dataset=None):
     # Arbitrary = selectData(Dataset)
     # groups = Arbitrary.keys()
 
-    #Export the data for survival anaylsis first.
+    #TODO Export the data for survival anaylsis first.
+
     Col += 2
 
-    # Export the HES admin data
+    # Export the HES admin datax
     Time = Dataset[0]['Time']
     DoseRatio = SA1DataManipulation.ResolvedHESAdministration(Dataset, output='ratio', graph = False)
     DoseRatioN = SA1DataManipulation.ResolvedHESAdministration(Dataset, output='possibleDoses', graph = False)
@@ -410,7 +432,7 @@ def SigmaPlotExport(Dataset=None):
         stdErr = selectData(Dataset, Key=field, returnForm='standardError')
 
         if means is not None:
-            BoolArray = np.invert(np.isnan(means[groups[0]]))
+            BoolArray = np.invert(np.isnan(means[groups[3]]))
             if len(BoolArray.shape) == 0:
                 #Write out the single value field.
                 continue #Skip for now.
@@ -431,7 +453,7 @@ def SigmaPlotExport(Dataset=None):
                     worksheet.write_string(row=Row, col=Col+2, string=(field + '-' + group + ' N'))
                     worksheet.write_column(row=Row+1, col=Col+2, data=N[group][BoolArray])
                     Col += 3
-    # Export the Neurological test data last, some reformatting is required.
+    # TODO Export the Neurological test data last, some reformatting is required.
 
 
     workbook.close()
@@ -484,9 +506,11 @@ def DescriptivesExport(Dataset):
 
     #Get all fields from the first dataset.
     fields = list(Dataset[0].keys())
+
     #Develop a list of interventions.
-    groups = list(selectData(Dataset).keys())
-    groups.sort() #Sort alphabetical. might change when we unblind. TODO.
+    groups = ['NS', 'TLP', 'POV', 'AVP']
+    # groups = list(selectData(Dataset).keys())
+    # groups.sort() #Sort alphabetical. might change when we unblind. TODO.
     TypeList = []
     #Develop a dict that has the indexes as a list for each group.
     groupIdx = {key: [] for key in groups}
@@ -535,9 +559,6 @@ def DescriptivesExport(Dataset):
                         worksheet.write(row + 4, col, data)
                     except:
                         print("an error from the Second write statement happened")
-
-
-
                 else:
                     if type(data) not in TypeList:
                         TypeList.append(type(data))
@@ -548,6 +569,12 @@ def DescriptivesExport(Dataset):
         #Between each group we need 5 rows to calc the sumamary statstics. First figure out the excel addresses for the start:stop points.
         #write the headers for the rows #Dr.G wants the summary statistics at the end of all four groups. Each of the groups can have a different 5 colunm summary stats.
         for ix, group in enumerate(groups):
+
+            worksheet.write_string(row+1, col, group, FormulaFormat)
+            worksheet.write_string(row+1, col+1, group, FormulaFormat)
+            worksheet.write_string(row+1, col + 2, group, FormulaFormat)
+            worksheet.write_string(row+1, col + 3, group, FormulaFormat)
+            worksheet.write_string(row+1, col + 4, group, FormulaFormat)
 
             worksheet.write_string(row+2, col, "Mean", FormulaFormat)
             worksheet.write_string(row+2, col+1, "SEM", FormulaFormat)
@@ -800,13 +827,48 @@ def StandardLoadingFunction(useCashe = False):
         # path = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\SA-1 Survival Phase (Master  Workbook) May 2, 2019 (Check Values Fixed).xlsx"
         # path = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\SA-1 Survival Phase (Master  Workbook) July 12 2019.xlsx"
         path = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\SA-1 Survival Phase (Master  Workbook Final) July 15 2019.xlsx"
+        path = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\SA-1 Survival Phase (Master  Workbook FINAL) Aug 1 2019.xlsx"
         print(' Loading from ' + path)
 
         # print(experiment_lst)
 
+
         Dataset = Parse_excel(path=path, Experiment_lst=experiment_lst)
 
-        print("Total Dataset Loaded and processed in {0} seconds".format(time.time() - timeTotal))
+        # Convert all datetimes to an int or string, they are annoying.
+        Dataset = DateTimesToStr(Dataset=Dataset)
+
+        # Calculate the pCO2 Ratio from the aortic to the venus.
+        # Dataset = SA1DataManipulation.ProduceRatios(Dataset, fieldNum='pCO2 Ao (OPTI)', fieldDenom='pCO2 PA (OPTI)', ratio = True,
+        #                                           OutfieldName='PCO2 PV Ratio')
+
+        #Alternate calc for the pCO2 gradient across arterial and venus samples.
+        Dataset = SA1DataManipulation.ProduceSums(Dataset, field1='pCO2 PA (OPTI)', field2='pCO2 Ao (OPTI)', add=False,
+                                                  OutfieldName='PCO2 PV difference')
+
+        Dataset = SA1DataManipulation.ProduceSums(Dataset, field1='pCO2 Ao (OPTI)', field2='PetCO2', add=False,
+                                                  OutfieldName='pCO2 Art-ETCo2 difference')
+
+        Dataset = SA1DataManipulation.ProduceRatios(Dataset, fieldNum= 'pCO2 Art-ETCo2 difference', fieldDenom='pCO2 Ao (OPTI)', ratio=True,
+                                                  OutfieldName='pCO2 A-ETCo2 %')
+        for exp in Dataset:
+            exp['pCO2 A-ETCo2 %'] = exp['pCO2 A-ETCo2 %'] * 100 #I'll MAKE A % OUT OF YOUUUUUUUUUU
+
+        SingleIntrestParameters = [('Ao mean', 30), ('Ao mean', 60), ('Ao mean', 240), ('Lactate Ao (OPTI)', 240), ('PetCO2 End Tidal Corrected', 30),
+                                   ('PetCO2 End Tidal Corrected', 30), ('VO2/ DO2', 30), ('VO2/ DO2', 240),
+                                   ('LV end-diastolic', 30), ('LV end-diastolic', 240)] #List of tuples of the form (field, timepoint to loop through for the timepoints of intrest.)
+        for Parameter in SingleIntrestParameters:
+            #Extract single timepoints of intrest for COX hazard analysis.
+            Dataset = SA1DataManipulation.SingleTimePointExtraction(Dataset=Dataset, field=Parameter[0], TimePoint=Parameter[1])
+
+        # List of tuples of the form (field, Max or min) to loop through for the max or min values, False gives you the minimum
+        MaxMinParameters = [('Ao mean', False), ('PetCO2 End Tidal Corrected', False), ('Heart rate LV', True), ('VO2/ DO2', True), ('LV end-diastolic', False)]
+        for Parameter in MaxMinParameters:
+            #Find the mins of the following parameters per animal for the cox proportional hazard model. Ao mean
+            Dataset = SA1DataManipulation.ProduceMinMaxValues(Dataset=Dataset, field=Parameter[0], FindMax=Parameter[1])
+
+
+        print("Total Dataset Loaded and processed at {0} seconds".format(time.time() - timeTotal))
 
         print('Taking averages for the bloodwork data where Ao and Venus data exist, combining where they are exclusive.')
         # Default settings are for the TEG data, take either or.
@@ -820,13 +882,13 @@ def StandardLoadingFunction(useCashe = False):
         Dataset = ArterialVenusAveraged(Dataset,
                                         fields=['pH', 'tCO2', 'HCO3', 'Na+', 'K+', 'Cl-', 'Ca++', 'AnGap', 'nCa++'],
                                         Technique='(OPTI ELYTE)')
-        print("Bloodwork averages done at in {0} seconds".format(time.time() - timeTotal))
+        print("Bloodwork averages done at at {0} seconds".format(time.time() - timeTotal))
 
         # Save the dataset to the cashe. (Maybe date the cashes, or that might lead to file inflation.
         print('Cashing dataset to disk.')
         with open(os.path.join('cashe', CasheFilename), 'wb') as f:
             pickle.dump(Dataset, f)
-            print('Cashe dumped to disk  in {0} '.format(time.time() - timeTotal))
+            print('Cashe dumped to disk  at {0} '.format(time.time() - timeTotal))
 
     elif not CasheExists:
         os.mkdir(os.path.join('cashe'))
@@ -843,15 +905,18 @@ def StandardLoadingFunction(useCashe = False):
 
 if __name__ == "__main__":
 
+    #Run the anaylsis starting from the master Excel sheets.
     Dataset = StandardLoadingFunction(useCashe=False)
+
+    #Run the standard loader using the cashe, good for testing new functions that don't depend on changes in input data.
+    # Dataset = StandardLoadingFunction(useCashe=True)
+
+
 
     Ao = selectData(Dataset)
 
-    #
-    # #Get a dataframe together for one variable. SelectData doesn't really work for this.
-    # frameLst = []
-    #
-    # for group in Ao.keys():
+
+    # # for group in Ao.keys():
     #     frameLst.append(pd.DataFrame(data= np.transpose(Ao[group]), index=Time))
     # dfTot = pd.join(frameLst, keys= Ao.keys())
 

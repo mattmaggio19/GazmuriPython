@@ -1,6 +1,7 @@
 
 import SA1DataLoader
 import numpy as np
+import pandas as pd
 from matplotlib import pyplot as plt
 
 #This file is for functions that actually change or calculate other parameters from the SA-1 study.
@@ -28,13 +29,16 @@ def PCo2Ratio(Dataset = None , graph = True):
         EtCo2Mean = np.nanmean(EtCo2[group], axis=0)
 
         if graph == True:
-            plt.scatter(x=Time[~np.isnan(cO2RatioMean)], y=cO2RatioMean[~np.isnan(cO2RatioMean)]/cO2RatioMean[0], label=str(' cO2 AV ratio'))
+
             plt.scatter(x=Time[~np.isnan(CCIMean)], y=CCIMean[~np.isnan(CCIMean)]/CCIMean[0],
                             label=str('CCI'))
             plt.scatter(x=Time[~np.isnan(EtCo2Mean)], y=EtCo2Mean[~np.isnan(EtCo2Mean)]/EtCo2Mean[0],
                         label=str('EtCo2'))
+            plt.scatter(x=Time[~np.isnan(cO2RatioMean)], y=cO2RatioMean[~np.isnan(cO2RatioMean)] / cO2RatioMean[0],
+                        label=str(' cO2 AV ratio'))
             # plt.xlabel('Time (min)')
             plt.title(group)
+            plt.ylim((0.25,1.2)) #This is the data normalized to baseline, change if you can switch back to actual values.
             plt.legend(loc='lower center')
             # plt.legend(loc='upper center', bbox_to_anchor=(1.45, 0.8), shadow=True, ncol=1)
             # ax.scatter(x=Time[~np.isnan(cO2RatioMean)], y=cO2RatioMean[~np.isnan(cO2RatioMean)],
@@ -43,6 +47,89 @@ def PCo2Ratio(Dataset = None , graph = True):
     if graph==True:
         plt.show()
     # print(cO2Ratio)
+
+def SingleTimePointExtraction(Dataset=None, field='', TimePoint=0):
+    # This function does a simple thing, It finds the value of the field at the time given by the input, then returns it to the dataset as a new measurement.
+    for exp in Dataset:
+        if type(exp[field]) == type(pd.Series()):
+            if not field == '':
+                Time = exp['Time']
+                TimeIdx = np.where(np.isin(Time, TimePoint))[0][0] #Weirdly complex expression, could be made better.
+                exp[field + ' Time ' + str(TimePoint)] = exp[field].iloc[TimeIdx]
+            else:
+                print('No Target field given')
+        else:
+            print('Input value is not a repeated measure.')
+
+    return Dataset
+
+
+def ProduceMinMaxValues(Dataset=None, field='', FindMax=True ):
+    #This function does a simple thing, It finds the min or max value in a series parameter and then returns that back to the dataset under a new field which is really the old field plus max or min.
+    #Since our repeated measurements are stored as a pandas.Series object, we should check for type first.
+
+    for exp in Dataset:
+        if type(exp[field]) == type(pd.Series()):
+            if not field == '':
+                if FindMax:
+                    exp[field+' Max'] = exp[field].max()
+                else:
+                    exp[field + ' Min'] = exp[field].min()
+            else:
+                print('No Target field given')
+        else:
+            print('Input value is not a repeated measure.')
+    return Dataset
+
+def ProduceRatios(Dataset=None, fieldNum='', fieldDenom='', ratio = True, OutfieldName = None):
+    #This is for multiplying/ dividing traces to calculate new Series. Calculated measurements like SVRI should be possible with this tool.
+    #If Ratio is set to false we will instead multiply the traces. Because multiplication is comutitive, we can call this function multiple times.
+    # if OutfieldName is not given we will construct a string from the fields we put together, if given, use that as the name of the dict variable.
+    for exp in Dataset:
+        if type(exp[fieldNum]) == type(pd.Series()) and type(exp[fieldDenom]) == type(pd.Series()) :
+            if not fieldNum == '' and not fieldDenom == '':
+                if ratio:
+                    #Take the Ratio of fieldNum to fieldDenom
+                    Outdata = exp[fieldNum].divide(exp[fieldDenom], fill_value=np.nan)
+                    Outfield = 'Ratio of ' + fieldNum + ' to' + fieldDenom
+                else:
+                    # Take the product of fieldNum and fieldDenom
+                    Outdata = exp[fieldNum].multiply(exp[fieldDenom], fill_value=np.nan)
+                    Outfield = 'Product of ' + fieldNum + ' to' + fieldDenom
+                if OutfieldName is None:
+                    exp[Outfield] =Outdata
+                else:
+                    exp[OutfieldName] = Outdata
+            else:
+                print('No Target fields given')
+        else:
+            print('Input value is not a repeated measure.') #This isn't technically true, a general version of this function could take a single value as the numerator or denominator.
+    return Dataset
+
+def ProduceSums(Dataset=None, field1='', field2='', add = True, OutfieldName = None):
+    #This is for multiplying/ dividing traces to calculate new Series. Calculated measurements like SVRI should be possible with this tool.
+    #If Ratio is set to false we will instead multiply the traces. Because multiplication is comutitive, we can call this function multiple times.
+    # if OutfieldName is not given we will construct a string from the fields we put together, if given, use that as the name of the dict variable.
+    for exp in Dataset:
+        if type(exp[field1]) == type(pd.Series()) and type(exp[field2]) == type(pd.Series()) :
+            if not field1 == '' and not field2 == '':
+                if add:
+                    #Take the Ratio of fieldNum to fieldDenom
+                    Outdata = exp[field1].add(exp[field2], fill_value=np.nan)
+                    Outfield = 'Ratio of ' + field1 + ' to' + field2
+                else:
+                    # Take the product of fieldNum and field Denom
+                    Outdata = exp[field1].subtract(exp[field2], fill_value=np.nan)
+                    Outfield = 'Product of ' + field1 + ' to' + field2
+                if OutfieldName is None:
+                    exp[Outfield] =Outdata
+                else:
+                    exp[OutfieldName] = Outdata
+            else:
+                print('No Target fields given')
+        else:
+            print('Input value is not a repeated measure.') #This isn't technically true, a general version of this function could take a single value as the numerator or denominator.
+    return Dataset
 
 
 def extractSurvivalCurve(Dataset = None, groupBy = 'Intervention', graph = True):
@@ -64,7 +151,7 @@ def extractSurvivalCurve(Dataset = None, groupBy = 'Intervention', graph = True)
 
         if graph == True:
             plt.step(Time, y, where='post', label=group)
-            plt.ylim((0,1))
+            plt.ylim((0,1.1))
 
         cumHaz[group] = (Time, y)
     if graph == True:
@@ -73,7 +160,17 @@ def extractSurvivalCurve(Dataset = None, groupBy = 'Intervention', graph = True)
         plt.show()
     return cumHaz
 
+def RelationshipBetweenAoSystolicHESandSurvival(Dataset = None, graph = True):
+    #This is a plot Sal proposed that would let us look at the relationship between HES administration pressure and survival.
+    #Basically we can seperate the animals by who got the last dose of hespand and who did not get the last dose of hespand
+    #Main y axis would be systolic Ao pressure. (though techincally we used the LV in the acute phase because it was more accurate.)
+    #Secondary y axis would be survival to see if the survival curve declines after missing a dose, we can code the deaths by their last checktime
 
+    CheckTimes = [30, 120, 240, 8*60, 12*60, 16*60, 20*60, 24*60]
+    groups = ['NS', 'TLP', 'POV', 'AVP']
+
+
+    pass
 
 
 
@@ -180,6 +277,6 @@ if __name__ == '__main__':
     Dataset = SA1DataLoader.StandardLoadingFunction(useCashe=True)
     # HES = ResolvedHESAdministration(Dataset, output='ratio', graph = True)
 
-    # PCo2Ratio(Dataset)
+    PCo2Ratio(Dataset)
 
     extractSurvivalCurve(Dataset, graph = True)
