@@ -59,7 +59,7 @@ def plotSpectra(Dataset, exp = [0], titles = ['450 nm Excitation']):
 
 
 if __name__ == "__main__":
-    path = r'C:\Users\mattm\Documents\Gazmuri analysis\Microspheres spectra data_blue and green.txt'
+    path = r'C:\Users\mattm\Documents\Gazmuri analysis\Microsphere Spectroscopy\Plate reader data\Microspheres spectra data_blue and green.txt'
     sampleNames = ['Empty', 'DI', "Yellow MS", 'Pink MS', 'Purple MS', 'Coral MS']
 
     Dataset = loadPlateReaderTxt(path, sampleNames, skipCol=1)

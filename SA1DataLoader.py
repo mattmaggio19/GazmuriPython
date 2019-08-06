@@ -296,10 +296,10 @@ def DateTimesToStr(Dataset = None):
             data = exp[field]
             # print(type(data))
             if type(data) == type(datetime.datetime.now()):
-                print('found a datetime obj ' + field + ' of type '+ str(type(data)))
+                # print('found a datetime obj ' + field + ' of type '+ str(type(data)))
                 exp[field] = str(data.strftime('%d/%m/%Y %H:%M:%S')) #Cast into a string var
             elif type(data) == type(datetime.time()):
-                print('found a datetime obj ' + field + ' of type '+ str(type(data)))
+                # print('found a datetime obj ' + field + ' of type '+ str(type(data)))
                 exp[field] = str(data.strftime('%H:%M:%S')) #Cast into a string var
     return Dataset
 
@@ -838,6 +838,12 @@ def StandardLoadingFunction(useCashe = False):
         # Convert all datetimes to an int or string, they are annoying.
         Dataset = DateTimesToStr(Dataset=Dataset)
 
+        for exp in Dataset: #Just make a single field for BoodLossByKg
+            if not np.isnan(exp['Estimated blood loss']):
+                exp['BoodLossByKg'] = exp['Estimated blood loss']/exp['weight']
+            else:
+                exp['BoodLossByKg'] = np.nan
+
         # Calculate the pCO2 Ratio from the aortic to the venus.
         # Dataset = SA1DataManipulation.ProduceRatios(Dataset, fieldNum='pCO2 Ao (OPTI)', fieldDenom='pCO2 PA (OPTI)', ratio = True,
         #                                           OutfieldName='PCO2 PV Ratio')
@@ -846,7 +852,7 @@ def StandardLoadingFunction(useCashe = False):
         Dataset = SA1DataManipulation.ProduceSums(Dataset, field1='pCO2 PA (OPTI)', field2='pCO2 Ao (OPTI)', add=False,
                                                   OutfieldName='PCO2 PV difference')
 
-        Dataset = SA1DataManipulation.ProduceSums(Dataset, field1='pCO2 Ao (OPTI)', field2='PetCO2', add=False,
+        Dataset = SA1DataManipulation.ProduceSums(Dataset, field1='pCO2 Ao (OPTI)', field2='PetCO2 End Tidal Corrected', add=False,
                                                   OutfieldName='pCO2 Art-ETCo2 difference')
 
         Dataset = SA1DataManipulation.ProduceRatios(Dataset, fieldNum= 'pCO2 Art-ETCo2 difference', fieldDenom='pCO2 Ao (OPTI)', ratio=True,
@@ -862,9 +868,9 @@ def StandardLoadingFunction(useCashe = False):
             Dataset = SA1DataManipulation.SingleTimePointExtraction(Dataset=Dataset, field=Parameter[0], TimePoint=Parameter[1])
 
         # List of tuples of the form (field, Max or min) to loop through for the max or min values, False gives you the minimum
-        MaxMinParameters = [('Ao mean', False), ('PetCO2 End Tidal Corrected', False), ('Heart rate LV', True), ('VO2/ DO2', True), ('LV end-diastolic', False)]
+        MaxMinParameters = [('Ao mean', False), ('PetCO2 End Tidal Corrected', False), ('Heart rate LV', True), ('VO2/ DO2', True), ('LV end-diastolic', True), ('SVRI', True)]
         for Parameter in MaxMinParameters:
-            #Find the mins of the following parameters per animal for the cox proportional hazard model. Ao mean
+            #Find the mins of the following parameters per animal for the cox proportional hazard model.
             Dataset = SA1DataManipulation.ProduceMinMaxValues(Dataset=Dataset, field=Parameter[0], FindMax=Parameter[1])
 
 
@@ -883,6 +889,7 @@ def StandardLoadingFunction(useCashe = False):
                                         fields=['pH', 'tCO2', 'HCO3', 'Na+', 'K+', 'Cl-', 'Ca++', 'AnGap', 'nCa++'],
                                         Technique='(OPTI ELYTE)')
         print("Bloodwork averages done at at {0} seconds".format(time.time() - timeTotal))
+
 
         # Save the dataset to the cashe. (Maybe date the cashes, or that might lead to file inflation.
         print('Cashing dataset to disk.')

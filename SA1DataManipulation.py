@@ -48,6 +48,10 @@ def PCo2Ratio(Dataset = None , graph = True):
         plt.show()
     # print(cO2Ratio)
 
+
+
+
+
 def SingleTimePointExtraction(Dataset=None, field='', TimePoint=0):
     # This function does a simple thing, It finds the value of the field at the time given by the input, then returns it to the dataset as a new measurement.
     for exp in Dataset:
@@ -106,6 +110,8 @@ def ProduceRatios(Dataset=None, fieldNum='', fieldDenom='', ratio = True, Outfie
             print('Input value is not a repeated measure.') #This isn't technically true, a general version of this function could take a single value as the numerator or denominator.
     return Dataset
 
+
+
 def ProduceSums(Dataset=None, field1='', field2='', add = True, OutfieldName = None):
     #This is for multiplying/ dividing traces to calculate new Series. Calculated measurements like SVRI should be possible with this tool.
     #If Ratio is set to false we will instead multiply the traces. Because multiplication is comutitive, we can call this function multiple times.
@@ -143,7 +149,7 @@ def extractSurvivalCurve(Dataset = None, groupBy = 'Intervention', graph = True)
     for exp in Dataset:
         surv[exp['Intervention']].append(exp['Survival time'])
 
-    cumHaz = dict.fromkeys(groups)
+    cumSurvival = dict.fromkeys(groups)
     for group in groups:
         y = []
         for t in Time:
@@ -153,12 +159,12 @@ def extractSurvivalCurve(Dataset = None, groupBy = 'Intervention', graph = True)
             plt.step(Time, y, where='post', label=group)
             plt.ylim((0,1.1))
 
-        cumHaz[group] = (Time, y)
+        cumSurvival[group] = y #Store the cumSurvival, can assume user knows the units of time are in min.
     if graph == True:
         plt.title('Overall Survival Curves.')
         plt.legend(loc='upper right')
         plt.show()
-    return cumHaz
+    return cumSurvival
 
 def RelationshipBetweenAoSystolicHESandSurvival(Dataset = None, graph = True):
     #This is a plot Sal proposed that would let us look at the relationship between HES administration pressure and survival.
@@ -167,10 +173,68 @@ def RelationshipBetweenAoSystolicHESandSurvival(Dataset = None, graph = True):
     #Secondary y axis would be survival to see if the survival curve declines after missing a dose, we can code the deaths by their last checktime
 
     CheckTimes = [30, 120, 240, 8*60, 12*60, 16*60, 20*60, 24*60]
+    CheckTimesArray = np.array(CheckTimes)
     groups = ['NS', 'TLP', 'POV', 'AVP']
+    groups_Format = []
+
+    # HES_output = ResolvedHESAdministration(Dataset) #Doesn't answer the question at hand.
+    cumSurvival = extractSurvivalCurve(Dataset, graph=False)
+
+    DeathScatterPlot = dict.fromkeys(groups) #Initialize the list for storing the survival time (x) and cum_haz level (y)
+    # and if each point is in the group that last got HES or did not get HES at the last checktime. This is the crux of the plot.
+    SystolicPressure = dict.fromkeys(groups)
+    for group in DeathScatterPlot:
+        DeathScatterPlot[group] = [] #Init empty list, going to put a 3 member Tuple. in for each animal.
+        SystolicPressure[group] = [] #Going to put in 2 np.arrays as tuples one with the data blocked out when the animal misses/gets a does of hespand. nanmean across animals.
+
+    for exp in Dataset:
+        group = exp['Intervention']
+        Time = exp['Time']
+        TimeArray = np.array(Time)
+        HES = exp['HESDelivered']
+        AoSys = np.array(exp['Ao systolic'])
+        LVSys = np.array(exp['LV systolic'])
+        Acute = (TimeArray <= 240)
+
+        CombinedSystolic = LVSys.copy() #used LV in the acute phase as it was more accurate than the side ports in most cases.
+        CombinedSystolic[~Acute] = AoSys[~Acute]
+
+        Bothsets = set(CheckTimes).intersection(Time)
+        indices = [list(Time).index(x) for x in Bothsets]
+        Last_HESDose = Time[np.where(~HES.isnull())[0][-1]]
+        Last_Checktime = CheckTimes[np.where(np.array(CheckTimes) <= exp['Survival time'])[0][-1]]
+        if Last_HESDose < Last_Checktime:
+            DeathScatterPlot[group].append((exp['Survival time'], cumSurvival[group][exp['Survival time']-1], False )) #Missed a dose of HES
+        else:
+            DeathScatterPlot[group].append((exp['Survival time'], cumSurvival[group][exp['Survival time']-1], True)) #Got last dose of HES
+
+        GotHES = CombinedSystolic.copy()
+        MissedHes = CombinedSystolic.copy() * np.nan
+        for t in CheckTimesArray:
+            prevHesDosesix = np.where(CheckTimesArray <= t)[0]
+            HESix = np.where( TimeArray == CheckTimesArray[prevHesDosesix[-1]])[0]
+            if not np.isnan(HES.iloc[HESix[-1]]): #Test if the last check time was given or not.
+                #Previous dose has been missed. nan out the GotHes array between the doses
+                TimeArray > CheckTimesArray[prevHesDosesix[-1]]
+                GotHES = np.nan
+            else:
+                #Dose has been gotten. Do nothing.
+                pass
 
 
-    pass
+
+
+    x, y, z  = zip(*DeathScatterPlot[group])
+    X, Y, Z = np.array(x), np.array(y), np.array(z, dtype='bool') #Recast as np.arrays, easier to slice.
+    plt.scatter(X[Z], Y[Z], label="Missed last checked dose of HES")
+    plt.scatter(X[~Z], Y[~Z], label="Got last checked dose of HES")
+    plt.step(np.arange(len(cumSurvival[group])), np.array(cumSurvival[group]), where='post', label=group)
+    plt.show()
+
+
+    # LV_systolic = exp['LV systolic']
+
+
 
 
 
@@ -277,6 +341,8 @@ if __name__ == '__main__':
     Dataset = SA1DataLoader.StandardLoadingFunction(useCashe=True)
     # HES = ResolvedHESAdministration(Dataset, output='ratio', graph = True)
 
-    PCo2Ratio(Dataset)
+    PCo2Ratio(Dataset, graph=False)
 
-    extractSurvivalCurve(Dataset, graph = True)
+    # extractSurvivalCurve(Dataset, graph=False)
+
+    RelationshipBetweenAoSystolicHESandSurvival(Dataset, graph=True)
