@@ -965,6 +965,7 @@ if __name__ == "__main__":
 """
 This is a list of the fields we are using currently. 7/22/19
 Date
+experimentNumber
 Series
 Block
 Intervention

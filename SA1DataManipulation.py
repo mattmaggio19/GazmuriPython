@@ -20,16 +20,17 @@ def PCo2Ratio(Dataset = None , graph = True):
     CCI = SA1DataLoader.selectData(Dataset, Key='CCI')
 
     cO2Ratio = dict()
-    plt.subplot(2, 2, 1)
+    if graph == True:
+        plt.subplot(2, 2, 1)
     for ix, group in enumerate(pCo2Ao.keys()):
-        plt.subplot(2, 2, ix+1)
+
         cO2Ratio[group] = np.divide(pCo2Ao[group], pCo2PA[group])
         cO2RatioMean = np.nanmean(cO2Ratio[group], axis=0)
         CCIMean = np.nanmean(CCI[group], axis=0)
         EtCo2Mean = np.nanmean(EtCo2[group], axis=0)
 
         if graph == True:
-
+            plt.subplot(2, 2, ix + 1)
             plt.scatter(x=Time[~np.isnan(CCIMean)], y=CCIMean[~np.isnan(CCIMean)]/CCIMean[0],
                             label=str('CCI'))
             plt.scatter(x=Time[~np.isnan(EtCo2Mean)], y=EtCo2Mean[~np.isnan(EtCo2Mean)]/EtCo2Mean[0],
@@ -176,7 +177,7 @@ def RelationshipBetweenAoSystolicHESandSurvival(Dataset = None, graph = True):
     CheckTimesArray = np.array(CheckTimes)
     groups = ['NS', 'TLP', 'POV', 'AVP']
     groups_Format = []
-
+    Time = Dataset[0]['Time']
     # HES_output = ResolvedHESAdministration(Dataset) #Doesn't answer the question at hand.
     cumSurvival = extractSurvivalCurve(Dataset, graph=False)
 
@@ -185,13 +186,15 @@ def RelationshipBetweenAoSystolicHESandSurvival(Dataset = None, graph = True):
     SystolicPressure = dict.fromkeys(groups)
     for group in DeathScatterPlot:
         DeathScatterPlot[group] = [] #Init empty list, going to put a 3 member Tuple. in for each animal.
-        SystolicPressure[group] = [] #Going to put in 2 np.arrays as tuples one with the data blocked out when the animal misses/gets a does of hespand. nanmean across animals.
-
+        SystolicPressure[group] = dict()
+        SystolicPressure[group]['GotHES'] = np.ones(Time.shape, dtype=float) * np.nan #Going to put in 2 np.arrays as tuples one with the data blocked out when the animal misses/gets a does of hespand. nanmean across animals.
+        SystolicPressure[group]['MissedHES'] = np.ones(Time.shape, dtype=float) * np.nan
     for exp in Dataset:
         group = exp['Intervention']
-        Time = exp['Time']
+
         TimeArray = np.array(Time)
         HES = exp['HESDelivered']
+        HESArray = np.array(HES)
         AoSys = np.array(exp['Ao systolic'])
         LVSys = np.array(exp['LV systolic'])
         Acute = (TimeArray <= 240)
@@ -199,8 +202,9 @@ def RelationshipBetweenAoSystolicHESandSurvival(Dataset = None, graph = True):
         CombinedSystolic = LVSys.copy() #used LV in the acute phase as it was more accurate than the side ports in most cases.
         CombinedSystolic[~Acute] = AoSys[~Acute]
 
-        Bothsets = set(CheckTimes).intersection(Time)
-        indices = [list(Time).index(x) for x in Bothsets]
+        #Bothsets = set(CheckTimes).intersection(Time)
+        #indices = [list(Time).index(x) for x in Bothsets]
+
         Last_HESDose = Time[np.where(~HES.isnull())[0][-1]]
         Last_Checktime = CheckTimes[np.where(np.array(CheckTimes) <= exp['Survival time'])[0][-1]]
         if Last_HESDose < Last_Checktime:
@@ -212,30 +216,125 @@ def RelationshipBetweenAoSystolicHESandSurvival(Dataset = None, graph = True):
         MissedHes = CombinedSystolic.copy() * np.nan
         for t in CheckTimesArray:
             prevHesDosesix = np.where(CheckTimesArray <= t)[0]
-            HESix = np.where( TimeArray == CheckTimesArray[prevHesDosesix[-1]])[0]
-            if not np.isnan(HES.iloc[HESix[-1]]): #Test if the last check time was given or not.
-                #Previous dose has been missed. nan out the GotHes array between the doses
-                TimeArray > CheckTimesArray[prevHesDosesix[-1]]
-                GotHES = np.nan
-            else:
+            HESix = np.where(TimeArray == CheckTimesArray[prevHesDosesix[-1]])[0]
+
+            if not np.isnan(HESArray[HESix[-1]]): #Test if the last check time was given or not.
                 #Dose has been gotten. Do nothing.
                 pass
+            else:
+                # Previous dose has been missed. nan out the GotHes array between this does and the last one.
+                #if we are at the last HES checkpoint, add to MissedHES then nan out the rest GotHes
+                if t == CheckTimesArray[-1]:
+                    MissedHes[HESix[0]:] = GotHES[HESix[0]:]
+                    GotHES[HESix[0]:] = np.nan
+                else:
+                    HESNext = np.where(TimeArray == CheckTimesArray[prevHesDosesix[-1] + 1])[0]
+                    MissedHes[HESix[0]:HESNext[0]] = GotHES[HESix[0]:HESNext[0]]
+                    GotHES[HESix[0]:HESNext[0]] = np.nan
+
+        SystolicPressure[group]['GotHES'] = np.vstack((SystolicPressure[group]['GotHES'], GotHES))
+        SystolicPressure[group]['MissedHES'] = np.vstack((SystolicPressure[group]['MissedHES'], MissedHes))
+
+
+    for group in groups:
+        #Plotting code for survival curves that indicate if the last dose of HES was missed or gotten.
+        x, y, z  = zip(*DeathScatterPlot[group])
+        X, Y, Z = np.array(x), np.array(y), np.array(z, dtype='bool') #Recast as np.arrays, easier to slice.
+        plt.scatter(X[Z], Y[Z], label="Got last checked dose of HES")
+        plt.scatter(X[~Z], Y[~Z], label="Missed last checked dose of HES")
+        plt.step(np.arange(len(cumSurvival[group])), np.array(cumSurvival[group]), where='post', label='Cum Survival')
+        plt.legend(loc='upper right')
+        plt.title('Survival Curve, Treatment = ' + group)
+        plt.show()
+
+        #Plotting code for the Systolic pressure traces.
+        plt.plot(np.array(Time), np.nanmean(SystolicPressure[group]['GotHES'], dtype=float, axis=0))
+        plt.plot(np.array(Time), np.nanmean(SystolicPressure[group]['MissedHES'], dtype=float, axis=0))
+        plt.step(np.arange(len(cumSurvival[group])), np.array(cumSurvival[group])*100, where='post', label=group)
+        plt.title('Systolic Pressure, Treatment = ' + group)
+        plt.show()
 
 
 
 
-    x, y, z  = zip(*DeathScatterPlot[group])
-    X, Y, Z = np.array(x), np.array(y), np.array(z, dtype='bool') #Recast as np.arrays, easier to slice.
-    plt.scatter(X[Z], Y[Z], label="Missed last checked dose of HES")
-    plt.scatter(X[~Z], Y[~Z], label="Got last checked dose of HES")
-    plt.step(np.arange(len(cumSurvival[group])), np.array(cumSurvival[group]), where='post', label=group)
-    plt.show()
-
-
-    # LV_systolic = exp['LV systolic']
 
 
 
+def HESvsSurvival(Dataset = None, graph = True ):
+    groups = ['NS', 'TLP', 'POV', 'AVP']
+    CheckTimes = [30, 120, 240, 8*60, 12*60, 16*60, 20*60, 24*60]
+    MaxHesVol = (np.arange(1, len(CheckTimes)+1) * 250) - 250
+    SubplotCoordVert, SubplotCoordHoriz = [0, 0, 1, 1], [0, 1, 0, 1] #useful lists for getting plots in a square.
+
+    # Plot to show the relationship of  survival time to total HES administered. Overall scatterplot.
+    HESTotal = dict.fromkeys(groups)
+    SurvivalTime = dict.fromkeys(groups)
+    ExperimentID = dict.fromkeys(groups)
+    Surv72 = dict.fromkeys(groups)
+    for group in groups: #TODO I should write a function to abstract this dumb process... If only!
+        HESTotal[group] = []
+        SurvivalTime[group] = []
+        ExperimentID[group] = []
+        Surv72[group] = []
+    for exp in Dataset:
+        HESTotal[exp['Intervention']].append(exp['HES'])
+        SurvivalTime[exp['Intervention']].append(exp['Survival time'])
+        ExperimentID[exp['Intervention']].append(exp['experimentNumber'])
+        Surv72[exp['Intervention']].append(exp['Survival 72 hours'])
+
+        #Convert the Y//N to Bool.
+        if Surv72[exp['Intervention']][-1] == 'Y':
+            Surv72[exp['Intervention']][-1] = True
+        else:
+            Surv72[exp['Intervention']][-1] = False
+
+    if graph:
+        for ix, group in enumerate(groups):
+            plt.scatter(
+                y=np.array(HESTotal[group]) + np.random.normal(loc=1, scale=10, size=len(np.array(HESTotal[group]))),
+                x=np.array(SurvivalTime[group]) + np.random.normal(loc=1, scale=10, size=len(np.array(HESTotal[group]))),
+                label=group)  # Dither the groups a bit to make overlap less likely..
+
+            for i, item in enumerate(ExperimentID[group]): #Print the data for manual exploration.
+                print(ExperimentID[group][i], HESTotal[group][i], SurvivalTime[group][i], Surv72[group][i], group)
+        plt.step(CheckTimes, MaxHesVol, where='pre', label = 'Maximum possible HES')
+        plt.legend(loc='upper left')
+        plt.ylabel('Total HES administered (ml)')
+        plt.xlabel('Survival Time (min)')
+        plt.title('HES administration vs Survival Time')
+        plt.show()
+
+
+
+        fig, axs = plt.subplots(2, 2)
+        plt.suptitle('HES administration among survivors and non survivors')
+        RUNS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+        for ix, group in enumerate(groups):
+            surv = np.array(HESTotal[group])[np.where(np.array(Surv72[group]))]
+            fail = np.array(HESTotal[group])[np.where(np.invert(np.array(Surv72[group])))]
+            if fail.shape[0] > surv.shape[0]:
+                surv = np.concatenate((surv, np.full((fail.shape[0]-surv.shape[0]), np.nan))) #add nans so they can be joined.
+                x = np.stack((surv, fail), axis=1)
+            elif fail.shape[0] < surv.shape[0]:
+                fail = np.concatenate((fail, np.full((surv.shape[0]-fail.shape[0]), np.nan))) #add nans so they can be joined.
+                x = np.stack((surv, fail), axis=1)
+            else:
+                x = np.stack((surv, fail), axis=1) #They must be the same shape!
+
+            print(group, x)
+            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].hist(x, 8, histtype='bar', stacked=True, fill = True, label= ['Survivors', 'Non survivors'])
+            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].set_title(group)
+            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].legend(loc = 'best')
+            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].set_yticks(RUNS)
+
+        for ax in axs.flat:
+            ax.set(xlabel='HES Admin', ylabel='Animal counts')
+        # # Hide x labels and tick labels for top plots and y ticks for right plots.
+        # for ax in axs.flat:
+        #     ax.label_outer()
+
+        plt.tight_layout()
+        plt.show()
 
 
 
@@ -343,6 +442,8 @@ if __name__ == '__main__':
 
     PCo2Ratio(Dataset, graph=False)
 
+    HESvsSurvival(Dataset)
+
     # extractSurvivalCurve(Dataset, graph=False)
 
-    RelationshipBetweenAoSystolicHESandSurvival(Dataset, graph=True)
+    # RelationshipBetweenAoSystolicHESandSurvival(Dataset, graph=True)
