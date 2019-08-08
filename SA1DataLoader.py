@@ -826,8 +826,9 @@ def StandardLoadingFunction(useCashe = False):
         # path = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\SA-1 Survival Phase (Master  Workbook) April 23, 2019 (Check Values Fixed).xlsx"
         # path = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\SA-1 Survival Phase (Master  Workbook) May 2, 2019 (Check Values Fixed).xlsx"
         # path = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\SA-1 Survival Phase (Master  Workbook) July 12 2019.xlsx"
-        path = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\SA-1 Survival Phase (Master  Workbook Final) July 15 2019.xlsx"
-        path = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\SA-1 Survival Phase (Master  Workbook FINAL) Aug 1 2019.xlsx"
+        # path = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\SA-1 Survival Phase (Master  Workbook Final) July 15 2019.xlsx"
+        # path = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\SA-1 Survival Phase (Master  Workbook FINAL) Aug 1 2019.xlsx"
+        path = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\SA-1 Survival Phase (Master  Workbook FINAL) Aug 6 2019 After ICPDescriptivesOut.xlsx"
         print(' Loading from ' + path)
 
         # print(experiment_lst)
@@ -840,7 +841,7 @@ def StandardLoadingFunction(useCashe = False):
 
         for exp in Dataset: #Just make a single field for BoodLossByKg
             if not np.isnan(exp['Estimated blood loss']):
-                exp['BoodLossByKg'] = exp['Estimated blood loss']/exp['weight']
+                exp['BoodLossByKg'] = exp['Estimated blood loss']/exp['Weight']
             else:
                 exp['BoodLossByKg'] = np.nan
 

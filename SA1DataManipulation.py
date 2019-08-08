@@ -162,12 +162,13 @@ def extractSurvivalCurve(Dataset = None, groupBy = 'Intervention', graph = True)
 
         cumSurvival[group] = y #Store the cumSurvival, can assume user knows the units of time are in min.
     if graph == True:
+        plt.axvline(240, color='red', label='End of acute phase')
         plt.title('Overall Survival Curves.')
         plt.legend(loc='upper right')
         plt.show()
     return cumSurvival
 
-def RelationshipBetweenAoSystolicHESandSurvival(Dataset = None, graph = True):
+def RelationshipBetweenAoSystolicHESandSurvival(Dataset = None, graph = False):
     #This is a plot Sal proposed that would let us look at the relationship between HES administration pressure and survival.
     #Basically we can seperate the animals by who got the last dose of hespand and who did not get the last dose of hespand
     #Main y axis would be systolic Ao pressure. (though techincally we used the LV in the acute phase because it was more accurate.)
@@ -177,6 +178,7 @@ def RelationshipBetweenAoSystolicHESandSurvival(Dataset = None, graph = True):
     CheckTimesArray = np.array(CheckTimes)
     groups = ['NS', 'TLP', 'POV', 'AVP']
     groups_Format = []
+    SubplotCoordVert, SubplotCoordHoriz = [0, 0, 1, 1], [0, 1, 0, 1]  # useful lists for getting plots in a square.
     Time = Dataset[0]['Time']
     # HES_output = ResolvedHESAdministration(Dataset) #Doesn't answer the question at hand.
     cumSurvival = extractSurvivalCurve(Dataset, graph=False)
@@ -189,6 +191,10 @@ def RelationshipBetweenAoSystolicHESandSurvival(Dataset = None, graph = True):
         SystolicPressure[group] = dict()
         SystolicPressure[group]['GotHES'] = np.ones(Time.shape, dtype=float) * np.nan #Going to put in 2 np.arrays as tuples one with the data blocked out when the animal misses/gets a does of hespand. nanmean across animals.
         SystolicPressure[group]['MissedHES'] = np.ones(Time.shape, dtype=float) * np.nan
+        SystolicPressure[group]['CombinedSystolic'] = np.ones(Time.shape, dtype=float) * np.nan
+        SystolicPressure[group]['Survival'] = []
+        SystolicPressure[group]['Survival'].append(np.nan)
+
     for exp in Dataset:
         group = exp['Intervention']
 
@@ -198,6 +204,7 @@ def RelationshipBetweenAoSystolicHESandSurvival(Dataset = None, graph = True):
         AoSys = np.array(exp['Ao systolic'])
         LVSys = np.array(exp['LV systolic'])
         Acute = (TimeArray <= 240)
+        Survival = exp['Survival 72 hours']
 
         CombinedSystolic = LVSys.copy() #used LV in the acute phase as it was more accurate than the side ports in most cases.
         CombinedSystolic[~Acute] = AoSys[~Acute]
@@ -231,28 +238,171 @@ def RelationshipBetweenAoSystolicHESandSurvival(Dataset = None, graph = True):
                     HESNext = np.where(TimeArray == CheckTimesArray[prevHesDosesix[-1] + 1])[0]
                     MissedHes[HESix[0]:HESNext[0]] = GotHES[HESix[0]:HESNext[0]]
                     GotHES[HESix[0]:HESNext[0]] = np.nan
-
+        SystolicPressure[group]['CombinedSystolic'] = np.vstack((SystolicPressure[group]['CombinedSystolic'], CombinedSystolic))
         SystolicPressure[group]['GotHES'] = np.vstack((SystolicPressure[group]['GotHES'], GotHES))
         SystolicPressure[group]['MissedHES'] = np.vstack((SystolicPressure[group]['MissedHES'], MissedHes))
+        if Survival == 'Y':
+            SystolicPressure[group]['Survival'].append(True)
+        else:
+            SystolicPressure[group]['Survival'].append(False)
 
+    if graph:
+        fig, axs = plt.subplots(2, 2)
+        plt.suptitle('Systolic Pressure Per group ')
+        Percentconversion = 100
+    for ix, group in enumerate(groups):
 
-    for group in groups:
-        #Plotting code for survival curves that indicate if the last dose of HES was missed or gotten.
-        x, y, z  = zip(*DeathScatterPlot[group])
-        X, Y, Z = np.array(x), np.array(y), np.array(z, dtype='bool') #Recast as np.arrays, easier to slice.
-        plt.scatter(X[Z], Y[Z], label="Got last checked dose of HES")
-        plt.scatter(X[~Z], Y[~Z], label="Missed last checked dose of HES")
-        plt.step(np.arange(len(cumSurvival[group])), np.array(cumSurvival[group]), where='post', label='Cum Survival')
-        plt.legend(loc='upper right')
-        plt.title('Survival Curve, Treatment = ' + group)
+        #CombinedSystolic
+        # axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].step(np.arange(len(cumSurvival[group])), np.array(cumSurvival[group]), where='post', label='Cum Survival')
+
+        # axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].title('Survival Curve, Treatment = ' + group)
+        # axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].show()
+
+        # #Plotting code for the Systolic pressure traces.
+        # plt.plot(np.array(Time), np.nanmean(SystolicPressure[group]['GotHES'], dtype=float, axis=0))
+        # plt.plot(np.array(Time), np.nanmean(SystolicPressure[group]['MissedHES'], dtype=float, axis=0))
+        # plt.step(np.arange(len(cumSurvival[group])), np.array(cumSurvival[group])*100, where='post', label=group)
+
+        # Plotting code for the combined Systolic pressure traces.
+
+        #The mean systolic pressure for determining if an animal got HES.
+        if graph:
+            size = 4
+            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].plot(np.array(Time), np.nanmean(SystolicPressure[group]['CombinedSystolic'], dtype=float, axis=0), label='Group mean of Systolic Pressure', color = 'blue' )
+            for col in np.arange(1, SystolicPressure[group]['CombinedSystolic'].shape[0]-1):
+                if col == 1:
+                    axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].scatter(-10, -10, s=size, color = 'blue', marker = 'x', label= 'Survivors' )
+                    axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].scatter(-10, -10, s=size, color='red', marker='x',
+                                                                             label='NonSurvivors')
+                if SystolicPressure[group]['Survival'][col]:
+                    axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].scatter(np.array(Time), SystolicPressure[group]['CombinedSystolic'][col][:], s=size, color = 'blue', marker = 'x', label= None)
+                else:
+                    axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].scatter(np.array(Time),
+                                                                             SystolicPressure[group]['CombinedSystolic'][
+                                                                                 col][:], s=size, color='red', marker='x', label= None)
+
+            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].axhline(80, color='red', label='HES Admin Threshold')
+            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].axvline(28, color='Cyan', label='Hes Admin times')
+            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].axvline(118, color='Cyan', label=None)
+            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].axvline(235, color='Cyan', label=None)
+            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].axvline(8*60 -20, color='Cyan', label=None)
+            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].axvline(8 * 60 - 20, color='Cyan', label=None)
+            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].axvline(12 * 60 - 20, color='Cyan', label=None)
+            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].axvline(16 * 60 - 20, color='Cyan', label=None)
+            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].axvline(20 * 60 - 20, color='Cyan', label=None)
+            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].axvline(24 * 60 - 20, color='Cyan', label=None)
+            # axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].axvline(240, color='red', label='End of acute phase')
+
+            # # #Draw the survival curve on the plot. Get's a little busy.
+            # axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].scatter(X[Z], Y[Z]*Percentconversion, label="Got last checked dose of HES", color= 'Firebrick')
+            # axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].scatter(X[~Z], Y[~Z]*Percentconversion, label="Missed last checked dose of HES", color= 'Cyan')
+            # axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].step(np.arange(len(cumSurvival[group])), np.array(cumSurvival[group])*Percentconversion, where='post', color='darkorange', label=(group + ' % Cumulative Survival'))
+
+            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].legend(loc='lower right', prop={'size': 8})
+            # axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].set_xlim([-10, 300])
+            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].set_xlim([-10, 800])
+            # axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].set_xlim([-10, 72*60]) #The whole dataset.
+            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].set_ylim([30, 130])
+            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].set_title(group)
+    if graph:
+        plt.tight_layout()
         plt.show()
 
-        #Plotting code for the Systolic pressure traces.
-        plt.plot(np.array(Time), np.nanmean(SystolicPressure[group]['GotHES'], dtype=float, axis=0))
-        plt.plot(np.array(Time), np.nanmean(SystolicPressure[group]['MissedHES'], dtype=float, axis=0))
-        plt.step(np.arange(len(cumSurvival[group])), np.array(cumSurvival[group])*100, where='post', label=group)
-        plt.title('Systolic Pressure, Treatment = ' + group)
-        plt.show()
+def HESAndPhysio(Dataset= None, Field=None, groupBy = 'HES120', graph=False):
+    # Prurpose of this function is to construct a plot to see if at the whole experiment level animals that got fluid at 120 had better hemodynamics.
+    # To that end, seperate the animals into Got HES at 120 min or didn't get HES at 120 and then graph the group means and of the field in question.
+    # Hes120
+    Time = Dataset[0]['Time']
+    TimeArray = np.array(Time)
+    ColorArray = ['Blue', 'FireBrick']
+    Treatmentgroups = ['NS', 'TLP', 'POV', 'AVP']
+    SubplotCoordVert, SubplotCoordHoriz = [0, 0, 1, 1], [0, 1, 0, 1]
+
+    size = 4
+    FudgeFactor = 3
+    for ix, exp in enumerate(Dataset):
+        Data = np.array(exp[Field], dtype=float)
+        HES = np.array(exp['HESDelivered'])
+        Treatment = exp['Intervention']
+        if groupBy == 'HES120':
+            #For grouping by Categories Needs to be deterministic.
+            categories = ['Got HES at 120', 'Missed HES at 120']
+            if np.isnan(HES[10]):
+                categ = categories[1]
+            else:
+                categ = categories[0]
+
+        elif groupBy == 'HES120&Treatment':
+            categories = ['Got HES at 120', 'Missed HES at 120']
+            if np.isnan(HES[10]):
+                categ = categories[1]
+            else:
+                categ = categories[0]
+
+
+        #elif more groupBy Conditions here.
+
+
+        if ix == 0:
+            DataArray = Data
+            categArray = np.ones(0)
+            categArray= np.append(categArray, categ)
+            TreatmentArray = np.ones(0)
+            TreatmentArray = np.append(TreatmentArray, Treatment)
+        else:
+            DataArray = np.vstack((DataArray, Data))
+            categArray= np.append(categArray, categ)
+            TreatmentArray = np.append(TreatmentArray, Treatment)
+
+    if graph:
+
+        if groupBy == 'HES120':
+            #This is for the whole dataset grouped by if the animal got HES120
+            for i, cat in enumerate(categories):
+                print(ColorArray[i], cat)
+                Index = np.where(categArray == cat)[0]
+                for col in np.arange(0, Index.shape[0]):
+
+                    #Scatter the data from each animal.
+                    if col == 0:
+                        plt.scatter(TimeArray+(i*FudgeFactor), DataArray[Index[col]][:], s=size, color=ColorArray[i], label=categories[i])
+                    else:
+                        plt.scatter(TimeArray+(i*FudgeFactor), DataArray[Index[col]][:], s=size, color=ColorArray[i], label=None)
+                #Plot the group means
+                plt.plot(TimeArray, np.nanmean(DataArray[np.where(categArray == cat)], axis=0), color=ColorArray[i], label=categories[i])
+
+            plt.legend(loc='best', prop={'size': 8})
+            plt.title(Field +' from whole Dataset, grouped by ' + groupBy )
+            plt.tight_layout()
+            plt.show()
+
+
+        elif groupBy == 'HES120&Treatment':
+
+            fig, axs = plt.subplots(2, 2)
+            plt.suptitle(Field +' grouped by ' + groupBy)
+            for ix, group in enumerate(Treatmentgroups):
+                for i, cat in enumerate(categories):
+                    # print(ColorArray[i], cat)
+                    Index = np.where(np.logical_and( categArray == cat , TreatmentArray == group ))[0]
+                    for col in np.arange(0, Index.shape[0]):
+                        # Scatter the data from each animal.
+                        if col == 0:
+                            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].scatter(TimeArray + (i * FudgeFactor), DataArray[Index[col]][:], s=size,
+                                        color=ColorArray[i], label=categories[i])
+                        else:
+                            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].scatter(TimeArray + (i * FudgeFactor), DataArray[Index[col]][:], s=size,
+                                        color=ColorArray[i], label=None)
+                        # Plot the group means
+                        axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].plot(TimeArray, np.nanmean(DataArray[Index], axis=0),
+                                 color=ColorArray[i], label=None)
+                        axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].set_title(group)
+                        axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].legend(loc = 'best', prop={'size': 8})
+
+            plt.tight_layout()
+            plt.show()
+
+        # elif more groupBy Conditions for more plots here.
 
 
 
@@ -298,10 +448,12 @@ def HESvsSurvival(Dataset = None, graph = True ):
             for i, item in enumerate(ExperimentID[group]): #Print the data for manual exploration.
                 print(ExperimentID[group][i], HESTotal[group][i], SurvivalTime[group][i], Surv72[group][i], group)
         plt.step(CheckTimes, MaxHesVol, where='pre', label = 'Maximum possible HES')
+        plt.axvline(240, color= 'red' , label='End of acute period')
         plt.legend(loc='upper left')
         plt.ylabel('Total HES administered (ml)')
         plt.xlabel('Survival Time (min)')
         plt.title('HES administration vs Survival Time')
+        plt.tight_layout()
         plt.show()
 
 
@@ -322,9 +474,9 @@ def HESvsSurvival(Dataset = None, graph = True ):
                 x = np.stack((surv, fail), axis=1) #They must be the same shape!
 
             print(group, x)
-            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].hist(x, 8, histtype='bar', stacked=True, fill = True, label= ['Survivors', 'Non survivors'])
+            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].hist(x, 8, histtype='bar', stacked=True, fill = True, label=['Survivors', 'Non survivors'])
             axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].set_title(group)
-            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].legend(loc = 'best')
+            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].legend(loc='best')
             axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].set_yticks(RUNS)
 
         for ax in axs.flat:
@@ -438,12 +590,33 @@ def PV_loop():
 if __name__ == '__main__':
     #Testing code goes here.
     Dataset = SA1DataLoader.StandardLoadingFunction(useCashe=True)
-    # HES = ResolvedHESAdministration(Dataset, output='ratio', graph = True)
 
-    PCo2Ratio(Dataset, graph=False)
+    # HES = ResolvedHESAdministration(Dataset, output='ratio', graph=True)
 
-    HESvsSurvival(Dataset)
+    RelationshipBetweenAoSystolicHESandSurvival(Dataset, graph=False)
 
-    # extractSurvivalCurve(Dataset, graph=False)
+    HESAndPhysio(Dataset, Field='LV systolic',  groupBy='HES120&Treatment', graph=True)
 
-    # RelationshipBetweenAoSystolicHESandSurvival(Dataset, graph=True)
+    HESAndPhysio(Dataset, Field='VO2/ DO2', groupBy='HES120&Treatment', graph=True)
+
+    # HESAndPhysio(Dataset, Field='CCI', groupBy='HES120', graph=True)
+    HESAndPhysio(Dataset, Field='CCI', groupBy='HES120&Treatment', graph=True)
+
+    # HESAndPhysio(Dataset, Field='Lactate Ao or PA (OPTI)', groupBy='HES120&Treatment', graph=True)
+
+    HESAndPhysio(Dataset, Field='SVRI', groupBy='HES120&Treatment', graph=True)
+
+    HESAndPhysio(Dataset, Field='LV systolic', graph=True)
+
+
+    # extractSurvivalCurve(Dataset, graph=True)
+
+    # PCo2Ratio(Dataset, graph=False)
+
+    # HESvsSurvival(Dataset)
+
+    # DO2I
+    # VO2I
+    # VO2/ DO2
+
+    # 'Lactate Ao or PA'
