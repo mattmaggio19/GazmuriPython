@@ -308,7 +308,7 @@ def RelationshipBetweenAoSystolicHESandSurvival(Dataset = None, graph = False):
         plt.tight_layout()
         plt.show()
 
-def HESAndPhysio(Dataset= None, Field=None, groupBy = 'HES120', graph=False):
+def GroupedPlots(Dataset= None, Field=None, groupBy = 'HES120', graph=False):
     # Prurpose of this function is to construct a plot to see if at the whole experiment level animals that got fluid at 120 had better hemodynamics.
     # To that end, seperate the animals into Got HES at 120 min or didn't get HES at 120 and then graph the group means and of the field in question.
     # Hes120
@@ -324,10 +324,22 @@ def HESAndPhysio(Dataset= None, Field=None, groupBy = 'HES120', graph=False):
         Data = np.array(exp[Field], dtype=float)
         HES = np.array(exp['HESDelivered'])
         Treatment = exp['Intervention']
+        Survival = exp['Survival 72 hours']
         if groupBy == 'HES120':
             #For grouping by Categories Needs to be deterministic.
             categories = ['Got HES at 120', 'Missed HES at 120']
             if np.isnan(HES[10]):
+                categ = categories[1]
+            else:
+                categ = categories[0]
+
+        elif groupBy == 'Treatment':
+            categories = Treatmentgroups
+            categ =None
+
+        elif groupBy == 'Survival&Treatment':
+            categories = ['Survived to 72', 'Non-survivors']
+            if Survival == 'N':
                 categ = categories[1]
             else:
                 categ = categories[0]
@@ -368,16 +380,56 @@ def HESAndPhysio(Dataset= None, Field=None, groupBy = 'HES120', graph=False):
                         plt.scatter(TimeArray+(i*FudgeFactor), DataArray[Index[col]][:], s=size, color=ColorArray[i], label=categories[i])
                     else:
                         plt.scatter(TimeArray+(i*FudgeFactor), DataArray[Index[col]][:], s=size, color=ColorArray[i], label=None)
+
                 #Plot the group means
-                plt.plot(TimeArray, np.nanmean(DataArray[np.where(categArray == cat)], axis=0), color=ColorArray[i], label=categories[i])
+
+                if np.any(np.isnan(DataArray[Index])):  # Plot group means correctly even when data has nans.
+                    PlotIdx = np.nonzero(np.sum(np.invert(np.isnan(DataArray[Index])), axis=0))
+                    plt.plot(TimeArray[PlotIdx], np.nanmean(DataArray[Index], axis=0)[PlotIdx], color=ColorArray[i], label=None)
+                else:
+                    plt.plot(TimeArray, np.nanmean(DataArray[Index], axis=0),color=ColorArray[i], label=None)
 
             plt.legend(loc='best', prop={'size': 8})
             plt.title(Field +' from whole Dataset, grouped by ' + groupBy )
             plt.tight_layout()
             plt.show()
 
+        elif groupBy == 'Treatment':
+            fig, axs = plt.subplots(2, 2)
+            plt.suptitle(Field + ' grouped by ' + groupBy)
+            for ix, group in enumerate(Treatmentgroups):
 
-        elif groupBy == 'HES120&Treatment':
+                # print(ColorArray[i], cat)
+                Index = np.where(TreatmentArray == group)[0]
+                for col in np.arange(0, Index.shape[0]):
+                    # Scatter the data from each animal.
+                    if col == 0:
+                        axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].scatter(TimeArray,
+                                                                                 DataArray[Index[col]][:], s=size,
+                                                                                 color=ColorArray[0],
+                                                                                 label=Treatmentgroups[ix])
+                    else:
+                        axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].scatter(TimeArray ,
+                                                                                 DataArray[Index[col]][:], s=size,
+                                                                                 color=ColorArray[0], label=None)
+                    # Plot the group means
+                    if np.any(np.isnan(DataArray[Index])):  # Plot group means correctly even when data has nans.
+                        PlotIdx = np.nonzero(np.sum(np.invert(np.isnan(DataArray[Index])), axis=0))
+                        axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].plot(TimeArray[PlotIdx],
+                                                                              np.nanmean(DataArray[Index], axis=0)[
+                                                                                  PlotIdx],
+                                                                              color=ColorArray[0], label=None)
+                    else:
+                        axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].plot(TimeArray,
+                                                                              np.nanmean(DataArray[Index], axis=0),
+                                                                              color=ColorArray[0], label=None)
+                    axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].set_title(group)
+                    axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].legend(loc='best', prop={'size': 8})
+
+            plt.tight_layout()
+            plt.show()
+
+        elif groupBy == 'Survival&Treatment':
 
             fig, axs = plt.subplots(2, 2)
             plt.suptitle(Field +' grouped by ' + groupBy)
@@ -394,8 +446,45 @@ def HESAndPhysio(Dataset= None, Field=None, groupBy = 'HES120', graph=False):
                             axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].scatter(TimeArray + (i * FudgeFactor), DataArray[Index[col]][:], s=size,
                                         color=ColorArray[i], label=None)
                         # Plot the group means
-                        axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].plot(TimeArray, np.nanmean(DataArray[Index], axis=0),
-                                 color=ColorArray[i], label=None)
+                        if np.any(np.isnan(DataArray[Index])): #Plot group means correctly even when data has nans.
+                            PlotIdx = np.nonzero(np.sum(np.invert(np.isnan(DataArray[Index])), axis=0))
+                            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].plot(TimeArray[PlotIdx], np.nanmean(DataArray[Index], axis=0)[PlotIdx],
+                                     color=ColorArray[i], label=None)
+                        else:
+                            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].plot(TimeArray, np.nanmean(DataArray[Index], axis=0),
+                                     color=ColorArray[i], label=None)
+                        axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].set_title(group)
+                        axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].legend(loc = 'best', prop={'size': 8})
+            plt.tight_layout()
+            plt.show()
+
+        elif groupBy == 'HES120&Treatment':
+
+            fig, axs = plt.subplots(2, 2)
+            plt.suptitle(Field +' grouped by ' + groupBy)
+            for ix, group in enumerate(Treatmentgroups):
+                for i, cat in enumerate(categories):
+                    # print(ColorArray[i], cat)
+                    Index = np.where(np.logical_and(categArray == cat , TreatmentArray == group ))[0]
+                    for col in np.arange(0, Index.shape[0]):
+                        # Scatter the data from each animal.
+                        if col == 0:
+                            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].scatter(TimeArray + (i * FudgeFactor), DataArray[Index[col]][:], s=size,
+                                        color=ColorArray[i], label=categories[i])
+                        else:
+                            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].scatter(TimeArray + (i * FudgeFactor), DataArray[Index[col]][:], s=size,
+                                        color=ColorArray[i], label=None)
+                        # Plot the group means
+                        if np.any(np.isnan(DataArray[Index])):  # Plot group means correctly even when data has nans.
+                            PlotIdx = np.nonzero(np.sum(np.invert(np.isnan(DataArray[Index])), axis=0))
+                            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].plot(TimeArray[PlotIdx],
+                                                                                  np.nanmean(DataArray[Index], axis=0)[
+                                                                                      PlotIdx],
+                                                                                  color=ColorArray[i], label=None)
+                        else:
+                            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].plot(TimeArray,
+                                                                                  np.nanmean(DataArray[Index], axis=0),
+                                                                                  color=ColorArray[i], label=None)
                         axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].set_title(group)
                         axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].legend(loc = 'best', prop={'size': 8})
 
@@ -591,22 +680,43 @@ if __name__ == '__main__':
     #Testing code goes here.
     Dataset = SA1DataLoader.StandardLoadingFunction(useCashe=True)
 
-    # HES = ResolvedHESAdministration(Dataset, output='ratio', graph=True)
+    # HES = ResolvedHESAdministration(Dataset, output='ratio', graph=True)  PA systolic
+
+    GroupedPlots(Dataset, Field='HESDelivered', groupBy='Survival&Treatment', graph=True)
+
+    GroupedPlots(Dataset, Field='HCT Ao (OPTI)', groupBy='HES120&Treatment', graph=True)
+
+    GroupedPlots(Dataset, Field='CCI', groupBy='Survival&Treatment', graph=True)
+
+    GroupedPlots(Dataset, Field='PA systolic', groupBy='Survival&Treatment', graph=True)
+
+    GroupedPlots(Dataset, Field='LV dP/dt min', groupBy='Survival&Treatment', graph=True)
+
+    GroupedPlots(Dataset, Field='SVRI', groupBy='Survival&Treatment', graph=True)
+
+    GroupedPlots(Dataset, Field='Lactate Ao (OPTI)', groupBy='HES120&Treatment', graph=True)
+
+    GroupedPlots(Dataset, Field='Lactate Ao (OPTI)', groupBy='Survival&Treatment', graph=True)
+
+
 
     RelationshipBetweenAoSystolicHESandSurvival(Dataset, graph=False)
 
-    HESAndPhysio(Dataset, Field='LV systolic',  groupBy='HES120&Treatment', graph=True)
+    # GroupedPlots(Dataset, Field='Ao systolic', groupBy='Survival&Treatment', graph=True)
 
-    HESAndPhysio(Dataset, Field='VO2/ DO2', groupBy='HES120&Treatment', graph=True)
+    # GroupedPlots(Dataset, Field='LV systolic', groupBy='Treatment', graph=True)
 
-    # HESAndPhysio(Dataset, Field='CCI', groupBy='HES120', graph=True)
-    HESAndPhysio(Dataset, Field='CCI', groupBy='HES120&Treatment', graph=True)
+    GroupedPlots(Dataset, Field='LV systolic',  groupBy='HES120&Treatment', graph=False)
 
-    # HESAndPhysio(Dataset, Field='Lactate Ao or PA (OPTI)', groupBy='HES120&Treatment', graph=True)
+    GroupedPlots(Dataset, Field='VO2/ DO2', groupBy='Survival&Treatment', graph=True)
 
-    HESAndPhysio(Dataset, Field='SVRI', groupBy='HES120&Treatment', graph=True)
+    #
 
-    HESAndPhysio(Dataset, Field='LV systolic', graph=True)
+
+
+    GroupedPlots(Dataset, Field='SVRI', groupBy='HES120&Treatment', graph=True)
+
+    GroupedPlots(Dataset, Field='LV systolic', graph=True)
 
 
     # extractSurvivalCurve(Dataset, graph=True)

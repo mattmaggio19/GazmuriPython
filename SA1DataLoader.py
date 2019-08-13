@@ -849,6 +849,22 @@ def StandardLoadingFunction(useCashe = False):
         # Dataset = SA1DataManipulation.ProduceRatios(Dataset, fieldNum='pCO2 Ao (OPTI)', fieldDenom='pCO2 PA (OPTI)', ratio = True,
         #                                           OutfieldName='PCO2 PV Ratio')
 
+        print(
+            'Taking averages for the bloodwork data where Ao and Venus data exist, combining where they are exclusive.')
+        # Default settings are for the TEG data, take either or.
+        Dataset = ArterialVenusAveraged(Dataset)
+        # Default settings are for the TEG data. #Had to change the strings to match the new (OPTI) field format.
+        Dataset = ArterialVenusAveraged(Dataset, fields=['tHg', 'O2Hb', 'COHb', 'MetHb', 'O2Ct', 'O2Cap', 'sO2'],
+                                        VenOrPA='PA', Technique='(AVOX)')
+        Dataset = ArterialVenusAveraged(Dataset,
+                                        fields=['pH', 'pCO2', 'pO2', 'BE', 'tCO2', 'HCO3', 'stHCO3', 'tHB', 'SO2',
+                                                'HCT',
+                                                'Lactate'], VenOrPA='PA', Technique='(OPTI)')
+        Dataset = ArterialVenusAveraged(Dataset,
+                                        fields=['pH', 'tCO2', 'HCO3', 'Na+', 'K+', 'Cl-', 'Ca++', 'AnGap', 'nCa++'],
+                                        Technique='(OPTI ELYTE)')
+        print("Bloodwork averages done at at {0} seconds".format(time.time() - timeTotal))
+
         #Alternate calc for the pCO2 gradient across arterial and venus samples.
         Dataset = SA1DataManipulation.ProduceSums(Dataset, field1='pCO2 PA (OPTI)', field2='pCO2 Ao (OPTI)', add=False,
                                                   OutfieldName='PCO2 PV difference')
@@ -869,7 +885,9 @@ def StandardLoadingFunction(useCashe = False):
             Dataset = SA1DataManipulation.SingleTimePointExtraction(Dataset=Dataset, field=Parameter[0], TimePoint=Parameter[1])
 
         # List of tuples of the form (field, Max or min) to loop through for the max or min values, False gives you the minimum
-        MaxMinParameters = [('Ao mean', False), ('PetCO2 End Tidal Corrected', False), ('Heart rate LV', True), ('VO2/ DO2', True), ('LV end-diastolic', True), ('SVRI', True)]
+        MaxMinParameters = [('Ao mean', False), ('PetCO2 End Tidal Corrected', False), ('Heart rate LV', True), ('VO2/ DO2', True),
+                            ('LV end-diastolic', True), ('CCI', False), ('SVRI', True), ('Lactate Ao or PA (OPTI)', True),
+                            ('LV dP/dt min', False)]
         for Parameter in MaxMinParameters:
             #Find the mins of the following parameters per animal for the cox proportional hazard model.
             Dataset = SA1DataManipulation.ProduceMinMaxValues(Dataset=Dataset, field=Parameter[0], FindMax=Parameter[1])
@@ -877,19 +895,7 @@ def StandardLoadingFunction(useCashe = False):
 
         print("Total Dataset Loaded and processed at {0} seconds".format(time.time() - timeTotal))
 
-        print('Taking averages for the bloodwork data where Ao and Venus data exist, combining where they are exclusive.')
-        # Default settings are for the TEG data, take either or.
-        Dataset = ArterialVenusAveraged(Dataset)
-        # Default settings are for the TEG data. #Had to change the strings to match the new (OPTI) field format.
-        Dataset = ArterialVenusAveraged(Dataset, fields=['tHg', 'O2Hb', 'COHb', 'MetHb', 'O2Ct', 'O2Cap', 'sO2'],
-                                        VenOrPA='PA', Technique='(AVOX)')
-        Dataset = ArterialVenusAveraged(Dataset,
-                                        fields=['pH', 'pCO2', 'pO2', 'BE', 'tCO2', 'HCO3', 'stHCO3', 'tHB', 'SO2', 'HCT',
-                                                'Lactate'], VenOrPA='PA', Technique='(OPTI)')
-        Dataset = ArterialVenusAveraged(Dataset,
-                                        fields=['pH', 'tCO2', 'HCO3', 'Na+', 'K+', 'Cl-', 'Ca++', 'AnGap', 'nCa++'],
-                                        Technique='(OPTI ELYTE)')
-        print("Bloodwork averages done at at {0} seconds".format(time.time() - timeTotal))
+
 
 
         # Save the dataset to the cashe. (Maybe date the cashes, or that might lead to file inflation.
@@ -962,14 +968,39 @@ if __name__ == "__main__":
     print("Program finished succesfully, that IS what you wanted right?")
 
 
-
-"""
-This is a list of the fields we are using currently. 7/22/19
+""""
 Date
-experimentNumber
 Series
 Block
 Intervention
+Splenic flow
+experimentNumber
+Time
+HESDelivered
+PCO2 PV difference
+pCO2 Art-ETCo2 difference
+pCO2 A-ETCo2 %
+Ao mean Time 30
+Ao mean Time 60
+Ao mean Time 240
+Lactate Ao (OPTI) Time 240
+PetCO2 End Tidal Corrected Time 30
+SVRI
+PVRI
+DO2I
+VO2I
+VO2/ DO2
+VO2/ DO2 Time 30
+VO2/ DO2 Time 240
+LV end-diastolic Time 30
+LV end-diastolic Time 240
+Ao mean Min
+PetCO2 End Tidal Corrected Min
+Heart rate LV Max
+VO2/ DO2 Max
+LV end-diastolic Max
+SVRI Max
+Lactate Ao or PA (OPTI) Max
 Weight
 Time ketamine injection
 Time LL/TBI
@@ -1117,8 +1148,8 @@ Food acquisition test error score 4
 Food acquisition test time 5
 Food acquisition test error score 5
 Novel object discrimination index
-experimentNumber
-Time
+
+BoodLossByKg
 R Ao or Ven
 K Ao or Ven
 Angle Ao or Ven
@@ -1129,31 +1160,32 @@ EPL Ao or Ven
 A Ao or Ven
 CI Ao or Ven
 LY30 Ao or Ven
-tHg Ao or PA
-O2Hb Ao or PA
-COHb Ao or PA
-MetHb Ao or PA
-O2Ct Ao or PA
-O2Cap Ao or PA
-sO2 Ao or PA
-pH Ao or PA
-pCO2 Ao or PA
-pO2 Ao or PA
-BE Ao or PA
-tCO2 Ao or PA
-HCO3 Ao or PA
-stHCO3 Ao or PA
-tHB Ao or PA
-SO2 Ao or PA
-HCT Ao or PA
-Lactate Ao or PA
-pH Ao or Ven
-tCO2 Ao or Ven
-HCO3 Ao or Ven
-Na+ Ao or Ven
-K+ Ao or Ven
-Cl- Ao or Ven
-Ca++ Ao or Ven
-AnGap Ao or Ven
-nCa++ Ao or Ven
+tHg Ao or PA (AVOX)
+O2Hb Ao or PA (AVOX)
+COHb Ao or PA (AVOX)
+MetHb Ao or PA (AVOX)
+O2Ct Ao or PA (AVOX)
+O2Cap Ao or PA (AVOX)
+sO2 Ao or PA (AVOX)
+pH Ao or PA (OPTI)
+pCO2 Ao or PA (OPTI)
+pO2 Ao or PA (OPTI)
+BE Ao or PA (OPTI)
+tCO2 Ao or PA (OPTI)
+HCO3 Ao or PA (OPTI)
+stHCO3 Ao or PA (OPTI)
+tHB Ao or PA (OPTI)
+SO2 Ao or PA (OPTI)
+HCT Ao or PA (OPTI)
+Lactate Ao or PA (OPTI)
+pH Ao or Ven (OPTI ELYTE)
+tCO2 Ao or Ven (OPTI ELYTE)
+HCO3 Ao or Ven (OPTI ELYTE)
+Na+ Ao or Ven (OPTI ELYTE)
+K+ Ao or Ven (OPTI ELYTE)
+Cl- Ao or Ven (OPTI ELYTE)
+Ca++ Ao or Ven (OPTI ELYTE)
+AnGap Ao or Ven (OPTI ELYTE)
+nCa++ Ao or Ven (OPTI ELYTE)
+
 """
