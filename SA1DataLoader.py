@@ -841,9 +841,9 @@ def StandardLoadingFunction(useCashe = False):
 
         for exp in Dataset: #Just make a single field for BoodLossByKg
             if not np.isnan(exp['Estimated blood loss']):
-                exp['BoodLossByKg'] = exp['Estimated blood loss']/exp['Weight']
+                exp['BloodLossByKg'] = exp['Estimated blood loss']/exp['Weight']
             else:
-                exp['BoodLossByKg'] = np.nan
+                exp['BloodLossByKg'] = np.nan #BoodLossByKg
 
         # Calculate the pCO2 Ratio from the aortic to the venus.
         # Dataset = SA1DataManipulation.ProduceRatios(Dataset, fieldNum='pCO2 Ao (OPTI)', fieldDenom='pCO2 PA (OPTI)', ratio = True,
@@ -887,7 +887,7 @@ def StandardLoadingFunction(useCashe = False):
         # List of tuples of the form (field, Max or min) to loop through for the max or min values, False gives you the minimum
         MaxMinParameters = [('Ao mean', False), ('PetCO2 End Tidal Corrected', False), ('Heart rate LV', True), ('VO2/ DO2', True),
                             ('LV end-diastolic', True), ('CCI', False), ('SVRI', True), ('Lactate Ao or PA (OPTI)', True),
-                            ('LV dP/dt min', False)]
+                            ('LV dP/dt min', True)]
         for Parameter in MaxMinParameters:
             #Find the mins of the following parameters per animal for the cox proportional hazard model.
             Dataset = SA1DataManipulation.ProduceMinMaxValues(Dataset=Dataset, field=Parameter[0], FindMax=Parameter[1])

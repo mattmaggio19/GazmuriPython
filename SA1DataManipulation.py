@@ -1,11 +1,17 @@
 
 import SA1DataLoader
 import numpy as np
+import subprocess, os
 import pandas as pd
 from matplotlib import pyplot as plt
+import matplotlib.ticker as ticker
+from brokenaxes import brokenaxes
+from matplotlib.gridspec import GridSpec
 
 #This file is for functions that actually change or calculate other parameters from the SA-1 study.
 # Hopefully these funciton are general enough to be useful.
+
+
 
 def FoodAqPlots():
     #This func should process the food aq data into binary form.
@@ -308,6 +314,133 @@ def RelationshipBetweenAoSystolicHESandSurvival(Dataset = None, graph = False):
         plt.tight_layout()
         plt.show()
 
+def GeneralizedPlotter(XData, YData, Field=None, ScatterCatagories = False, ScatterArray=None, SeperateTreatmentplots = False, TreatmentArray=None ):
+    #For now assume that x is always time. Can test later.
+
+    ColorArray = ['Blue', 'FireBrick']
+    Treatmentgroups = ['NS', 'TLP', 'POV', 'AVP']
+    SubplotCoordVert, SubplotCoordHoriz = [0, 0, 1, 1], [0, 1, 0, 1]
+    size = 4
+    FudgeFactor = 3
+    AxesBreakListX = ((0, 240), (8*60, 72*60))
+
+    suptitle = Field + ' grouped by '
+    if isinstance(ScatterCatagories, type(list())):
+        suptitle = suptitle + ScatterCatagories[0]
+    if isinstance(SeperateTreatmentplots, type(list())):
+        suptitle = suptitle + 'and ' + 'Treatment '
+
+    #Detect if we need to use broken axes
+    PlotIdxBroke = np.nonzero(np.sum(np.invert(np.isnan(YData)), axis=0))
+    if XData[PlotIdxBroke][-1] > 250:
+        BreakAxes = True
+        print('brakeing the axes')
+    else:
+        BreakAxes = False
+
+
+    if isinstance(SeperateTreatmentplots, type(list())):
+        if BreakAxes:
+            fig = plt.figure(constrained_layout=False)
+            sps = GridSpec(2, 2, figure=fig)
+        else:
+            fig, axs = plt.subplots(2, 2)
+
+        for ix, group in enumerate(SeperateTreatmentplots):
+            if BreakAxes == False:
+                for i, cat in enumerate(ScatterCatagories):
+                    Index = np.where(np.logical_and(ScatterArray == cat, TreatmentArray == group))[0]
+                    print(ColorArray[i], cat, group, len(Index))
+                    for col in np.arange(0, Index.shape[0]):
+                        # Scatter the data from each animal.
+                        if col == 0:
+                            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].scatter(XData + (i * FudgeFactor),
+                                                                                     YData[Index[col]][:], s=size,
+                                                                                     color=ColorArray[i],
+                                                                                     label=ScatterCatagories[i])
+                        else:
+                            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].scatter(XData + (i * FudgeFactor),
+                                                                                     YData[Index[col]][:], s=size,
+                                                                                     color=ColorArray[i],
+                                                                                     label=None)
+                        # Plot the group means
+                        if np.any(np.isnan(YData[Index])):  # Plot group means correctly even when data has nans.
+                            PlotIdx = np.nonzero(np.sum(np.invert(np.isnan(YData[Index])), axis=0))
+                            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].plot(XData[PlotIdx],
+                                                                                  np.nanmean(YData[Index], axis=0)[
+                                                                                      PlotIdx],
+                                                                                  color=ColorArray[i], label=None)
+                        else:
+                            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].plot(XData,
+                                                                                  np.nanmean(YData[Index], axis=0),
+                                                                                  color=ColorArray[i], label=None)
+
+                        axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].set_title(group)
+                        axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].legend(loc='best', prop={'size': 8})
+            else:
+
+                # #Custom Implementation of a broken axis plot taking some inspiration.
+                # gs = GridSpec.GridSpecFromSubplotSpec(subplot_spec=sps[ix])
+                # big_ax = plt.Subplot(fig, sps[ix])
+                # [sp.set_visible(False) for sp in big_ax.spines.values()]
+                # big_ax.set_xticks([])
+                # big_ax.set_yticks([])
+                # big_ax.patch.set_facecolor('none')
+                # for igs in gs:
+                #     ax = plt.Subplot(fig, igs)
+                #     fig.add_subplot(ax)
+                #     axs.append(ax)
+                # fig.add_subplot(big_ax)
+
+
+                #broken Axes was unsuccessful at doing the job out of the box.
+                bax = brokenaxes(xlims=AxesBreakListX, subplot_spec=sps[ix])
+                bax.standardize_ticks(xbase = 10)
+                for i, cat in enumerate(ScatterCatagories):
+                    Index = np.where(np.logical_and(ScatterArray == cat, TreatmentArray == group))[0]
+                    print(ColorArray[i], cat, group, len(Index))
+
+                    for col in np.arange(0, Index.shape[0]):
+                        # Scatter the data from each animal. break the axes
+                        if col == 0:
+                            bax.scatter(XData + (i * FudgeFactor), YData[Index[col]][:], s=size, color=ColorArray[i],label=ScatterCatagories[i])
+                        else:
+                            bax.scatter(XData + (i * FudgeFactor), YData[Index[col]][:], s=size, color=ColorArray[i], label=None)
+                        # Plot the group means
+                        if np.any(np.isnan(YData[Index])):  # Plot group means correctly even when data has nans.
+                            PlotIdx = np.nonzero(np.sum(np.invert(np.isnan(YData[Index])), axis=0))
+                            bax.plot(XData[PlotIdx], np.nanmean(YData[Index], axis=0)[PlotIdx], color=ColorArray[i], label=None)
+                        else:
+                            bax.plot(XData, np.nanmean(YData[Index], axis=0), color=ColorArray[i], label=None)
+
+
+                        bax.set_title(group)
+                        bax.legend(loc='best', prop={'size': 8})
+
+        #
+        # if BreakAxes == True: #Reformat the axes breaks.
+        #     for j, ax in enumerate(fig.axes):
+        #         if j%3 == 0: #Left of the break
+        #             ax.set_xlim(0, 250)
+        #         elif j%3 == 1: #Right of the break
+        #             ax.set_xlim(280, 72*60)
+        #         elif j%3 == 2: #This axis contains the other 2. For some reason.
+        #             pass
+
+
+        plt.suptitle(suptitle, size=10)
+        plt.tight_layout()
+        plt.show()
+
+        return fig
+
+    else:
+        fig, axs = plt.subplots(1, 1)
+
+
+
+    pass
+
 def GroupedPlots(Dataset= None, Field=None, groupBy = 'HES120', graph=False):
     # Prurpose of this function is to construct a plot to see if at the whole experiment level animals that got fluid at 120 had better hemodynamics.
     # To that end, seperate the animals into Got HES at 120 min or didn't get HES at 120 and then graph the group means and of the field in question.
@@ -398,7 +531,6 @@ def GroupedPlots(Dataset= None, Field=None, groupBy = 'HES120', graph=False):
             fig, axs = plt.subplots(2, 2)
             plt.suptitle(Field + ' grouped by ' + groupBy)
             for ix, group in enumerate(Treatmentgroups):
-
                 # print(ColorArray[i], cat)
                 Index = np.where(TreatmentArray == group)[0]
                 for col in np.arange(0, Index.shape[0]):
@@ -430,7 +562,6 @@ def GroupedPlots(Dataset= None, Field=None, groupBy = 'HES120', graph=False):
             plt.show()
 
         elif groupBy == 'Survival&Treatment':
-
             fig, axs = plt.subplots(2, 2)
             plt.suptitle(Field +' grouped by ' + groupBy)
             for ix, group in enumerate(Treatmentgroups):
@@ -459,21 +590,30 @@ def GroupedPlots(Dataset= None, Field=None, groupBy = 'HES120', graph=False):
             plt.show()
 
         elif groupBy == 'HES120&Treatment':
+            try:
+                GeneralizedPlotter(XData=TimeArray, YData=DataArray, Field=Field, ScatterCatagories=categories, ScatterArray=categArray,
+                                   SeperateTreatmentplots=Treatmentgroups, TreatmentArray=TreatmentArray)
+            except:
+                print('generalized code still borked.')
+            #Developing a generalized plotting func
 
             fig, axs = plt.subplots(2, 2)
-            plt.suptitle(Field +' grouped by ' + groupBy)
+            plt.suptitle(Field + ' grouped by ' + groupBy)
             for ix, group in enumerate(Treatmentgroups):
                 for i, cat in enumerate(categories):
                     # print(ColorArray[i], cat)
-                    Index = np.where(np.logical_and(categArray == cat , TreatmentArray == group ))[0]
+                    Index = np.where(np.logical_and(categArray == cat, TreatmentArray == group))[0]
                     for col in np.arange(0, Index.shape[0]):
                         # Scatter the data from each animal.
                         if col == 0:
-                            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].scatter(TimeArray + (i * FudgeFactor), DataArray[Index[col]][:], s=size,
-                                        color=ColorArray[i], label=categories[i])
+                            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].scatter(TimeArray + (i * FudgeFactor),
+                                                                                     DataArray[Index[col]][:], s=size,
+                                                                                     color=ColorArray[i],
+                                                                                     label=categories[i])
                         else:
-                            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].scatter(TimeArray + (i * FudgeFactor), DataArray[Index[col]][:], s=size,
-                                        color=ColorArray[i], label=None)
+                            axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].scatter(TimeArray + (i * FudgeFactor),
+                                                                                     DataArray[Index[col]][:], s=size,
+                                                                                     color=ColorArray[i], label=None)
                         # Plot the group means
                         if np.any(np.isnan(DataArray[Index])):  # Plot group means correctly even when data has nans.
                             PlotIdx = np.nonzero(np.sum(np.invert(np.isnan(DataArray[Index])), axis=0))
@@ -486,10 +626,11 @@ def GroupedPlots(Dataset= None, Field=None, groupBy = 'HES120', graph=False):
                                                                                   np.nanmean(DataArray[Index], axis=0),
                                                                                   color=ColorArray[i], label=None)
                         axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].set_title(group)
-                        axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].legend(loc = 'best', prop={'size': 8})
+                        axs[SubplotCoordVert[ix], SubplotCoordHoriz[ix]].legend(loc='best', prop={'size': 8})
 
             plt.tight_layout()
             plt.show()
+
 
         # elif more groupBy Conditions for more plots here.
 
@@ -671,6 +812,47 @@ def BloodWithdrawnPerKg(Dataset= None):
             exp['BloodWithdrawnMLPerKg'] = BlTrace / (Weight * 1.06) #Divide by weight and the density of blood.
     return Dataset
 
+def TimeInvariantScatterPlot(Dataset=None, xfield=None,yfield=None, seperateTreatement=False ):
+    x, y, Treatment = [], [], []
+    groups = ['NS', 'TLP', 'POV', 'AVP']
+
+    for exp in Dataset:
+        x.append(exp[xfield])
+        y.append(exp[yfield])
+        Treatment.append(exp['Intervention'])
+    if seperateTreatement:
+        x = np.array(x)
+        y = np.array(y)
+        Treatment = np.array(Treatment)
+        for group in groups:
+            xdata = x[np.where(Treatment == group)[0]]
+            xdata[np.where(xdata == 72*60)[0]] = xdata[np.where(xdata == 72*60)[0]] + np.random.normal(size=xdata[np.where(xdata == 72*60)[0]].shape, loc = 0, scale = 80)#Dither the x where animals make it to 72*60 min.
+            plt.scatter(xdata, y[np.where(Treatment == group)[0]], label=group)
+
+        plt.legend(loc='best', prop={'size': 8})
+
+    else:
+        plt.scatter(x, y)
+
+    plt.title(yfield + ' by ' + xfield)
+    plt.xlabel(xfield)
+    plt.ylabel(yfield)
+    plt.show()
+
+def SaveFigureAsEPS(Fig, filepath=None):
+    inkscape_path = "C://Program Files//Inkscape//inkscape.exe"\
+
+    if filepath is not None:
+        path, filename = os.path.split(filepath)
+        filename, extension = os.path.splitext(filename)
+
+        svg_filepath = os.path.join(path, filename + '.svg')
+        emf_filepath = os.path.join(path, filename + '.emf')
+
+        Fig.savefig(svg_filepath, format='svg')
+
+        subprocess.call([inkscape_path, svg_filepath, '--export-emf', emf_filepath])
+        # os.remove(svg_filepath)
 
 def PV_loop():
     #TODO Technically this isn't SA-1 material, but if I ever get around to doing this I'll troubleshoot the data here.
@@ -680,9 +862,28 @@ if __name__ == '__main__':
     #Testing code goes here.
     Dataset = SA1DataLoader.StandardLoadingFunction(useCashe=True)
 
+    GroupedPlots(Dataset, Field='LV systolic', groupBy='HES120&Treatment', graph=True)
+
+    # Plot that identifies the HES administered per group against survival time and then graphs the histogram of HES admin per group with survivors vs non survivors
+    # HESvsSurvival(Dataset, graph=True)
+
+    GroupedPlots(Dataset, Field='PetCO2 End Tidal Corrected', groupBy='Survival&Treatment', graph=True)
+
+    TimeInvariantScatterPlot(Dataset, yfield='BloodLossByKg', xfield='Ao mean Time 30', seperateTreatement=True)
+
+    TimeInvariantScatterPlot(Dataset, yfield='BloodLossByKg', xfield='Survival time', seperateTreatement=True)
+
+    TimeInvariantScatterPlot(Dataset, yfield='BloodLossByKg', xfield='Liver Lacerations', seperateTreatement=True)
+
+
+
+    RelationshipBetweenAoSystolicHESandSurvival(Dataset, graph=True)
+
     # HES = ResolvedHESAdministration(Dataset, output='ratio', graph=True)  PA systolic
 
-    GroupedPlots(Dataset, Field='HESDelivered', groupBy='Survival&Treatment', graph=True)
+    GroupedPlots(Dataset, Field='Heart rate LV', groupBy='HES120&Treatment', graph=True)
+
+    # GroupedPlots(Dataset, Field='HESDelivered', groupBy='Survival&Treatment', graph=True)
 
     GroupedPlots(Dataset, Field='HCT Ao (OPTI)', groupBy='HES120&Treatment', graph=True)
 
@@ -700,7 +901,7 @@ if __name__ == '__main__':
 
 
 
-    RelationshipBetweenAoSystolicHESandSurvival(Dataset, graph=False)
+
 
     # GroupedPlots(Dataset, Field='Ao systolic', groupBy='Survival&Treatment', graph=True)
 
@@ -723,7 +924,7 @@ if __name__ == '__main__':
 
     # PCo2Ratio(Dataset, graph=False)
 
-    # HESvsSurvival(Dataset)
+
 
     # DO2I
     # VO2I
