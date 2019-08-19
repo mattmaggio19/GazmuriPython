@@ -862,12 +862,12 @@ if __name__ == '__main__':
     #Testing code goes here.
     Dataset = SA1DataLoader.StandardLoadingFunction(useCashe=True)
 
-    GroupedPlots(Dataset, Field='LV systolic', groupBy='HES120&Treatment', graph=True)
+    # GroupedPlots(Dataset, Field='LV systolic', groupBy='HES120&Treatment', graph=True)
 
     # Plot that identifies the HES administered per group against survival time and then graphs the histogram of HES admin per group with survivors vs non survivors
     # HESvsSurvival(Dataset, graph=True)
 
-    GroupedPlots(Dataset, Field='PetCO2 End Tidal Corrected', groupBy='Survival&Treatment', graph=True)
+    # GroupedPlots(Dataset, Field='PetCO2 End Tidal Corrected', groupBy='Survival&Treatment', graph=True)
 
     TimeInvariantScatterPlot(Dataset, yfield='BloodLossByKg', xfield='Ao mean Time 30', seperateTreatement=True)
 

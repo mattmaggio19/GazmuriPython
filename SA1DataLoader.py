@@ -492,11 +492,14 @@ def DescriptivesExportLinked(Dataset): #TODO Dr.G wants descriptives that are in
     pass
 
 
-def DescriptivesExport(Dataset):
+def DescriptivesExport(Dataset, OutName = None, groups = ['NS', 'TLP', 'POV', 'AVP']):
     #Dr.G Likes to visually page through the data to look for outliers and strange values.
     #He uses a copy and paste macro I can't replicate. This should work though.
     outpath = r'C:\Users\mattm\PycharmProjects\GazmuriDataLoader\Export\\'
-    workbook = xlwrite.Workbook(outpath + 'Descriptives.xlsx', {'nan_inf_to_errors': False})
+    if OutName == None:
+        workbook = xlwrite.Workbook(outpath + 'Descriptives.xlsx', {'nan_inf_to_errors': False})
+    else:
+        workbook = xlwrite.Workbook(outpath + OutName + '.xlsx', {'nan_inf_to_errors': False})
     worksheet = workbook.add_worksheet()
     #Add formats here
     FormulaFormat = workbook.add_format({'bold': True, 'border': 1, 'bg_color': '#FFA500'})
@@ -508,10 +511,17 @@ def DescriptivesExport(Dataset):
     fields = list(Dataset[0].keys())
 
     #Develop a list of interventions.
-    groups = ['NS', 'TLP', 'POV', 'AVP']
+
     # groups = list(selectData(Dataset).keys())
     # groups.sort() #Sort alphabetical. might change when we unblind. TODO.
     TypeList = []
+    if groups == None:
+        #If no groups data given, figure it ouut. by getting a list of unique groups.
+        groups = []
+        for exp in Dataset:
+            if exp['Intervention'] not in groups:
+                groups.append(exp['Intervention'])
+
     #Develop a dict that has the indexes as a list for each group.
     groupIdx = {key: [] for key in groups}
     for idx, data in enumerate(Dataset):
@@ -520,6 +530,9 @@ def DescriptivesExport(Dataset):
     (row, col) = (0, 0) #Where to start counting from.
 
     for index, field in enumerate(fields):
+        if field == 'Time':
+            continue
+
         if index == 0:  # write the first 2 columns that Dr.G has set up.
             col1 = (r'Exp.#,Intervention,General,BL,' + ('LL/TBI,' * 35)).split(',')
             col1.pop(-1)  # Drop the last entry in the list
