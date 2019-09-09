@@ -1,7 +1,21 @@
+from PIL import Image
+import tifffile as tif
 
-def MicrosphereImages():
-    pass
+def MicrosphereImage(path = r'C:\Users\mattm\PycharmProjects\GazmuriDataLoader\TyphoonScans\MicrosphereTest 160S7 -[Cy2].tif' ):
+    array = tif.imread(path)
+    im = Image.fromarray(array)
+    im.show()
 
+def splitImages(xdiv = 2, ydiv = 2, namelist = None):
+
+    #Often we are going to aquire more than one slide at once on the typhoon. use this to make a list of the subimages by evenly
+    # splitting the image into subimages and return them as a list. This list should be row wise and then each colunm.
+    # If the user gives us named for all the images then we can return them as a dict instead.
+
+
+    #Check if namelist is none, then make sure there are enough names.
+    if namelist == None:
+        pass
 
 if __name__ == "__main__":
-    pass
+    MicrosphereImage()

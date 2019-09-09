@@ -2,6 +2,7 @@ import time
 import numpy as np
 import pandas as pd
 import SA1DataLoader
+import xlsxwriter as xlwrite
 
 def Parse_excel(path=None, Experiment_lst = ["2018124"]):
     #There were many formating decisions made to make the sheet more human readable.
@@ -89,12 +90,24 @@ def Parse_excel(path=None, Experiment_lst = ["2018124"]):
 
 def StandardLoadingFunction(useCashe=False):
     path = r'C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\Master Workbook (ZNEPO).xlsx'
-    Dataset = Parse_excel(path=path, Experiment_lst=["2019058"])
-    SA1DataLoader.DescriptivesExport(Dataset, OutName='RatZnEPO_Descriptives', groups=None)
-    #Quick piece of code to fix the first two colunms being hard coded.
 
+    #More nonvalid than valid, just type the damn numbers
+    Experiment_lst = [2019046, 2019048, 2019049, 2019052, 2019053, 2019055, 2019056, 2019057, 2019058, 2019059, 2019060, 2019064,
+                      2019066, 2019067, 2019069, 2019071]
+    Experiment_lst = list(map(str, Experiment_lst)) #Gotta be strings for excel not to panic.
+
+    Dataset = Parse_excel(path=path, Experiment_lst=Experiment_lst)
+    SA1DataLoader.DescriptivesExport(Dataset, OutName='RatZnEPO_Descriptives', groups=None)
+
+
+    #Quick piece of code to fix the first two colunms being hard coded. Annoying but no time to fix.
+    # outpath = r'C:\Users\mattm\PycharmProjects\GazmuriDataLoader\Export\\'
+    # GetTime = Dataset[0]['Time']
+    # workbook = xlwrite.Workbook(outpath + 'RatZnEPO_Descriptives' + '.xlsx', {'nan_inf_to_errors': False})
+    # worksheets = workbook.worksheets()[0]
+    # worksheet.write_column(row=6, col=1, data=GetTime)
+    # workbook.close()
 
 if __name__ == "__main__":
-
     #Run the anaylsis starting from the master Excel sheets.
     Dataset = StandardLoadingFunction(useCashe=False)

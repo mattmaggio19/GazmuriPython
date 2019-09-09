@@ -534,10 +534,13 @@ def DescriptivesExport(Dataset, OutName = None, groups = ['NS', 'TLP', 'POV', 'A
             continue
 
         if index == 0:  # write the first 2 columns that Dr.G has set up.
-            col1 = (r'Exp.#,Intervention,General,BL,' + ('LL/TBI,' * 35)).split(',')
-            col1.pop(-1)  # Drop the last entry in the list
+            GetTime = Dataset[0]['Time']
+
             col2a = np.concatenate((np.arange(0, 15 + 5, 5), np.arange(30, 240 + 15, 15)))
             col2b = np.arange(8, 72 + 4, 4)
+            col1 = (r'Exp.#,Intervention,General,BL,' + ('LL/TBI,' * len(GetTime))).split(',')
+            col1.pop(-1)  # Drop the last entry in the list
+
             col2 = []
             for num in col2a:
                 col2.append(str(num) + ' min')
@@ -561,12 +564,12 @@ def DescriptivesExport(Dataset, OutName = None, groups = ['NS', 'TLP', 'POV', 'A
                 worksheet.write(row+3, col, group, FieldFormat)  # Write the treatment
 
                 if isinstance(data, (type(pd.Series()), type(list()), type(np.array(1)))): #Need to discriminate between single valued fields and array based fields.
-                    for i, datum in enumerate(data):
-                        if not np.isnan(datum):
-                            try:
+                    try:
+                        for i, datum in enumerate(data):
+                            if not np.isnan(datum):
                                 worksheet.write(row+5+i, col, datum)
-                            except:
-                                print("an error from the first write statement happened")
+                    except:
+                        print("an error from the first write statement happened")
                 elif isinstance(data, (type(datetime.datetime.now()), type(str()), type(int()), type(float()), type(datetime.time()))): #Many types are loaded from excel data.
                     try:
                         worksheet.write(row + 4, col, data)
@@ -602,7 +605,7 @@ def DescriptivesExport(Dataset, OutName = None, groups = ['NS', 'TLP', 'POV', 'A
             worksheet.write_string(row + 3, col + 3, group, FormulaFormat)
             worksheet.write_string(row + 3, col + 4, group, FormulaFormat)
 
-            for statrow in range(row+4, len(col2)+6):
+            for statrow in range(row+4, len(GetTime)+6):
 
                 ncol = str(xlwrite.utility.xl_col_to_name(col + 2)) + str(statrow)
                 slide = 5 * ix #Slide over enough to not count the previous summary columns.
@@ -623,16 +626,16 @@ def DescriptivesExport(Dataset, OutName = None, groups = ['NS', 'TLP', 'POV', 'A
 
             #Dr.G wants a max of max and min of min col to help look for outliers.
             startrow = str(xlwrite.utility.xl_col_to_name(col + 0) + str(4))
-            stoprow = str(xlwrite.utility.xl_col_to_name(col + 0) + str(len(col2)+4))
-            worksheet.write_formula(len(col2)+6, col + 0,
+            stoprow = str(xlwrite.utility.xl_col_to_name(col + 0) + str(len(GetTime)+4))
+            worksheet.write_formula(len(GetTime)+6, col + 0,
                                     'AVERAGE(' + startrow + ':' + stoprow + ')', FormulaFormat)
             startrow = str(xlwrite.utility.xl_col_to_name(col + 3) + str(4))
-            stoprow = str(xlwrite.utility.xl_col_to_name(col + 3) + str(len(col2)+4))
-            worksheet.write_formula(len(col2)+6, col + 3,
+            stoprow = str(xlwrite.utility.xl_col_to_name(col + 3) + str(len(GetTime)+4))
+            worksheet.write_formula(len(GetTime)+6, col + 3,
                                     'MIN(' + startrow + ':' + stoprow + ')', FormulaFormat)
             startrow = str(xlwrite.utility.xl_col_to_name(col + 4) + str(4))
-            stoprow = str(xlwrite.utility.xl_col_to_name(col + 4) + str(len(col2) + 4))
-            worksheet.write_formula(len(col2)+6, col + 4,
+            stoprow = str(xlwrite.utility.xl_col_to_name(col + 4) + str(len(GetTime ) + 4))
+            worksheet.write_formula(len(GetTime)+6, col + 4,
                                     'MAX(' + startrow + ':' + stoprow + ')', FormulaFormat)
             col += 5  # move over 5 col after every group/treatment. Start the next field output.
 
@@ -849,7 +852,7 @@ def StandardLoadingFunction(useCashe = False):
 
         Dataset = Parse_excel(path=path, Experiment_lst=experiment_lst)
 
-        # Convert all datetimes to an int or string, they are annoying.
+        # Convert all datetimes to an int or string, because they are annoying.
         Dataset = DateTimesToStr(Dataset=Dataset)
 
         for exp in Dataset: #Just make a single field for BoodLossByKg

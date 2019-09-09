@@ -13,7 +13,7 @@ def frange(start, stop, step):
 
 
 def LoadLabviewData(path=None, samplingRate = 250, headers = 5):
-    # This is the most important method here, Gazmuri's labveiw system dumps the data to a file without timestamps on the datasamples, the headers are what is inside the colunms.
+    # This is the most important method here, Gazmuri's labview system dumps the data to a file without timestamps on the datasamples, the headers are what is inside the colunms.
     # We can use this to load to a dataframe, but I never resolved how to stitch them together in a time resolved manner.
 
     #TODO finish this and make it robust to different experiments.

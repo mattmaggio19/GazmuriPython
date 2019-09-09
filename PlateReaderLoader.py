@@ -1,9 +1,80 @@
 
 
 import numpy as np
+import pandas as pd
+import csv
+
+def loadPlateReaderTxt(path):
+    #More general loader.
+    f = csv.reader(open(path, "r"), delimiter='\t')
+    metadata = []
+    datalst = []
+    for i, row in enumerate(f):
+        if i < 3:
+            metadata.append(row)
+        else:
+            if len(row) < 16:
+                for j in range(0, 16-len(row)):
+                    row.append('')
+            row = [np.nan if R in ['#Sat', '', '\n'] else R for R in row]
+            datalst.append(row)
+
+    DataArray = np.array(datalst, dtype=float)
+    Emissions = DataArray[np.where(~np.isnan(DataArray[:, 0]))[0], 0]
+    for Emission in np.where(~np.isnan(DataArray[:, 0]))[0]:
+        #TODO Fold the results from different emissions into the 3rd dim of the array.
+        pass
+
+    # DataLst, EmissionLst = [], []
+    # count = 0
+    # NewEmission, EmissionWavelenth = True, None
+    # Data2D = []
+    # with open(path) as f:
+    #     # x = f.read()
+    #     # print(x)
+    #     lines = f.readlines()
+    #     for line in lines:
+    #         split = line.split('\t')
+    #         print(split)
+    #         # print(count, ": ", repr(line))
+    #         count += 1
+    #
+    #         if split[0] == '~End': #No mo data.
+    #             print('Reached the end of the file.')
+    #             break
+    #
+    #         if np.char.isnumeric(split[0]) and NewEmission: #Handle a new Emissions instance
+    #             Data2D = [] #Init a new 2D array the size of the plate.
+    #             EmissionWavelenth = int(split[0])
+    #             # Data2D = np.empty(shape=(8, 16)) * np.nan #Init a new 2D array the size of the plate.
+    #             NewEmission = False
+    #
+    #         if not NewEmission:
+    #             #append the data into the Data2D array.
+    #             #Replace empty and saturated with nans.
+    #             split = [np.nan if R in['#Sat', '', '\n'] else R for R in split]
+    #             #pop the first 2 nans out, pop the last nan out because it was a /n
+    #             # split.pop[]
+    #             Data2D.append(split) #Convert to numpy array later.
+    #
+    #
+    #         if all(elem == np.nan for elem in split[:-1]):
+    #             if EmissionWavelenth is not None:
+    #                 EmissionLst.append(EmissionWavelenth)
+    #                 DataLst.append(Data2D)
+    #             NewEmission, EmissionWavelenth = True, None
 
 
-def loadPlateReaderTxt(path, sampleNames, skipCol, dataType ='Spectrum'):
+            # if np.char.isnumeric(next(f).split('\t')[0]):  #Reset for a new Emissions instance. Store data here and reset. Annoying that it triggers the first time.
+
+
+
+        #Pile the 2D data into a 3D numpy array.
+
+
+def loadPlateReaderTxtOLD(path, sampleNames, skipCol, dataType ='Spectrum'):
+    #What was I thinking when I wrote this?
+
     f = open(path)
     next(f)  # Skip first line
     if dataType == 'Spectrum':  # logic should only work for spectra data
@@ -23,6 +94,8 @@ def loadPlateReaderTxt(path, sampleNames, skipCol, dataType ='Spectrum'):
                         pass
                     elif data[0] == 'Wavelength(nm)':  #do nothing
                         pass
+                    elif data[0] == r'~End\\n':
+                        pass
                     elif data[0] == 'Copyright ? 2004 Molecular Devices. All rights reserved.':  #do nothing
                         pass
                     elif bool(data[0]): #then we have a new emissions data for the plate.
@@ -41,7 +114,7 @@ def loadPlateReaderTxt(path, sampleNames, skipCol, dataType ='Spectrum'):
                             Row = [np.nan if R == '#Sat' else R for R in Row ]  # Replace saturated values with nan
                             expLst[expNum][sampleNames[sample]].append(Row)  # Put the rest of the data in. one in.
                             sample += 1
-        expLst.pop() #Remove the last exp, the text file terminates in a ~end
+        # expLst.pop() #Remove the last exp, the text file terminates in a ~end
 
         #Clean up the sample 2 D lists into a numpy array.
         Output = []
@@ -53,14 +126,22 @@ def loadPlateReaderTxt(path, sampleNames, skipCol, dataType ='Spectrum'):
     print('Dataset Loaded')
     return Output
 
-def plotSpectra(Dataset, exp = [0], titles = ['450 nm Excitation']):
+def plotSpectra(Dataset, exp = [0], title = ['450 nm Excitation']):
     pass #Maybe implement here for easy calling?
 
 
 
 if __name__ == "__main__":
-    path = r'C:\Users\mattm\Documents\Gazmuri analysis\Microsphere Spectroscopy\Plate reader data\Microspheres spectra data_blue and green.txt'
-    sampleNames = ['Empty', 'DI', "Yellow MS", 'Pink MS', 'Purple MS', 'Coral MS']
 
-    Dataset = loadPlateReaderTxt(path, sampleNames, skipCol=1)
-    plotSpectra(Dataset, exp=[0], titles=['450 nm Excitation'])
+
+    #
+    path = r'C:\Users\mattm\Documents\Gazmuri analysis\Microsphere Spectroscopy\Plate reader data\Microspheres spectra data_blue and green.txt'
+    # sampleNames = ['Empty', 'DI', "Yellow MS", 'Purple MS', 'Coral MS', 'Pink MS']
+
+    path = r'C:\Users\mattm\Documents\Gazmuri analysis\Microsphere Spectroscopy\Plate reader data\Microspheres boiled 485 ex spectra.txt'
+    sampleNames = ["Yellow MS", 'Purple MS', 'Coral MS', 'Pink MS']
+
+    # Dataset = loadPlateReaderTxtOLD(path, sampleNames, skipCol=1)
+    Dataset = loadPlateReaderTxt(path)
+
+    plotSpectra(Dataset, exp=[0], title=['485 nm Excitation'])
