@@ -4,6 +4,7 @@ from collections import OrderedDict
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import pickle
 from itertools import count, takewhile
 from SinosoidalFit import fit_sin, fit_sin_regularized, thetaAtPoint
 
@@ -19,27 +20,36 @@ def LoadLabviewData(path=None, samplingRate = 250, headers = 5):
     #TODO finish this and make it robust to different experiments.
 
 
-    #Open with builtin loader to determine number of lines in file.
-    with open(path) as f:
-        size = sum(1 for _ in f)
-    size = size - headers  # Subtract the headers
 
-    #Create a list of times that corrispond to the length of time from start of file.
-    idx = list(frange(0, size / samplingRate, 1 / samplingRate))
+
+
     #use pandas to load from the text file skiping the first 3 rows (metadata)
     df = pd.read_csv(path, sep='\t', skiprows=[0, 1, 2], header=[1])
 
-    #Todo Store the metadata in the dataframe in some sensible way
+    #Create a list of times that corrispond to the length of time from start of file.
+    idx = list(frange(0, df.shape[0] / samplingRate, 1 / samplingRate))
 
-    #Store the time series as Time column
-    if size == len(idx):
-        df['Time'] = idx
+    if len(idx) != df.shape[0]:
+        #Take steps to make sure that each row has a time assigned to it. Likely this is due to the 1/sampling step size in the list.
+        #Get the number they are different and append the idx with as many entries as needed.
+        entriesNeeded = df.shape[0] - len(idx)
+        if entriesNeeded > 0:
+            for i in range(0, entriesNeeded):
+                idx.append(idx[-1] + (1/samplingRate))
+        else:
+            #cut off the last few entries to make them equal.
+            idx = idx[:entriesNeeded]
+
+    assert len(idx) == df.shape[0]
+    df['Time'] = idx
 
 
     #Store the sampling rate for refrence later.
     df.samplingRate = samplingRate
     #return the dataframe
     return df
+
+
 
 def PlotTimeSeries(timeseries= None , dataSeries = None, timeRange = (0, 15*250)):
     #timeSeries should be a single series
@@ -243,53 +253,119 @@ def ICPSpikeAnalysis(df):
     return (slope, percentIntoCycle)
 
 
-def Parse_experiment_dir(dirpath):
+def Parse_experiment_dir(dirpath, StartFile = None):
     #Todo Basically I want this function to return a collection of the paths to the raw data files in the directory.
     # If we return a list, it should be a tuple of two lists with the first as the experiment time the file starts, and the second as a list of the paths.
     # However, it's probably better to use an ordered dict. The order of the dict is therefore the order of the
     # date modified of the files and then the key is the time point the file is assosated with.
-    #Logic to decide based on filename what it is.
+    # 9/19/2019 Coming back to this, I think it might be better to just have all of the files in the experimental directory in order of when they were made.
+    # Then we can find a sensable start, end, and death times for the acute data. If these can't be found automatically we can find them manually.
+
     #Return ordered Dict. look for information under ['metadata']
     dirLst = getfiles(dirpath)
     od = OrderedDict()
     od['metadata'] = dict()
     od['metadata']['expPath'] = dirpath
-    #need a few flags for logical reasons.
-    BaselineN = 0
-    ExpStart = False
+    Dir = os.path.basename(os.path.normpath(dirpath))
+    od['metadata']['expNumber'] = ''    #Get the experiment number as a string.
+    for char in Dir:
+        if char.isnumeric():
+            od['metadata']['expNumber'] +=char
 
-    for file in dirLst:
-        if 'BL' in file: #Must be a baseline file
-            print('Baseline found  '  + file)
+    # od['metadata']['expNumber'] = int(od['metadata']['expNumber']) #Cast into an integer? #maybe remove, I think I use strings elsewhere.
 
-        elif 'Time' in file: # must be an Experimental file
-            if 'Time 0-10' in file: # must be the first experimental data file, unless we had a false start experiment thing that happened once or twice. use a flag to mark.
-                if ExpStart is False:
-                    (key, filetime) = getFileLabel(file)
-                    od[key] = file #Store the file under the key for experiment time.
-                    ExpStart = True
-                    od['metadata']['ExperimentStart'] = filetime
-                elif True: #TODO Determine if we had a false start or we restart the exp after 240 to keep recording during second surgery. Take corrective action
+    #Access the events file, take it out of the dir
+    if 'EVENTS' in dirLst:
+        od['metadata']['Events'] = dirLst.pop(dirLst.index('EVENTS'))
 
-                    pass
-            else:
-                (key, timestamp) = getFileLabel(file)
-                od[key] = file
+    #Read the experiment log and take it out of the dir.
+    if 'Experiment log' in dirLst:
+        od['metadata']['ExpLog'] = dirLst.pop(dirLst.index('Experiment log'))
 
-            print('Experiment file found  '  + file)
-        elif 'Experiment' in file:
-            print('Experiment Log found '  + file)
-        elif 'EVENTS' in file:
-            print('EVENT Log found  '  + file)
+    #Attempt to find the start of the experiment.
+    #Lame, this doesn't exactly work every time. We have times when we start over the aquistion to get data from the after 240 time.
+    #TODO Need to get the exp start time from something... We could always refer to the excel sheet, it's inelagant, but it should work.
+    if StartFile is not None:
+        od['metadata']['ExpStart'] = StartFile #user supplies the start file.
+    else:
+        #If no user input see if there is more than 1 candidate.
+        od['metadata']['ExpStart'] = None
+        candidates = []
+        for filename in dirLst:
+            if 'Time 0-10' in filename:
+                candidates.append(filename)
 
-    #Test code for display
-    for key in od.keys():
-        print(key)
-        print(od[key])
-        for field in od['metadata']:
-            print('Printing Metadata')
-            print(field)
-            print(od['metadata'][field])
+        if len(candidates) == 1:
+            #Single Candidate, make that the exp start file.
+            od['metadata']['ExpStart'] = candidates[0]
+        elif len(candidates) > 1:
+            #If there is more than 1 possible start file, check if the file is in the correct ball park for length, most of our false starts are only a few seconds of data.
+            for c in candidates:
+                if os.path.getsize(os.path.join(dirpath, c)) < 10000000:
+                    P = candidates.pop(candidates.index(c))
+
+            #
+            od['metadata']['ExpStart'] = candidates[0]  # always use the earliest starting file, this should be correct if we eliminate the false starts above.
+
+    #Same logic to get the latest baseline.
+    od['metadata']['Base'] = None
+    candidates = []
+    for filename in dirLst:
+        if 'Time 0-10' in filename:
+            candidates.append(filename)
+    if len(candidates) == 1:
+        od['metadata']['Baseline'] = candidates[0]
+
+
+
+
+    #Return the dir list entirely. This is all the labview data sorted by when the file was created.
+    od['dataLst'] = dirLst
+    return od
+
+
+def LoadRawExperiment(expdict = None, TimeTup = (0, 15)):
+    #Ok, so we have all the labview data, and we know when the experiment started,
+    #next step is to actually load the dataset from multiple files. use a seperate method to get basline.
+    Path = expdict['metadata']['expPath']
+    dataLst =expdict['dataLst']
+
+    #if TimeTup is 0, get the first file loaded.
+    if TimeTup[0] == 0:
+        LoadIdx = dataLst.index(expdict['metadata']['ExpStart'])
+        print('starting from the begining of the experiment {0}  {1}  '.format(expdict['metadata']['expNumber'], dataLst[LoadIdx]))
+    else:
+        #TODO Figure out how far into the exp you need to start if not the begining
+        pass
+    #Load the first exp.
+    df = LoadLabviewData(path=os.path.join(Path, dataLst[LoadIdx]), samplingRate = 250, headers = 5)
+
+    upToTime = df['Time'].iloc[-1]
+
+    while round(upToTime/60) < TimeTup[1]:
+        LoadIdx += 1
+        print('loading next file, ' + dataLst[LoadIdx])
+        df1 = LoadLabviewData(path=os.path.join(Path, dataLst[LoadIdx]), samplingRate=250, headers=5)
+
+        #Add the upToTime to the new time col in the new dataframe, then merge them vertically.
+        df1['Time'] = df1['Time'] + upToTime
+        df = pd.concat([df, df1], axis=0)
+
+        upToTime = df['Time'].iloc[-1] #update the time we are up to in seconds.
+
+
+        #Add a check if there is even another file to load in the next iter of the while loop.
+        if not round(upToTime/60) < TimeTup[1]:
+            print('Succesfully loaded the full dataset from {0} to {1} min'.format(str(TimeTup[0]), str(TimeTup[1])))
+            break
+        elif LoadIdx+1 > len(dataLst)-1:
+            print('could not load the full amount of time on exp {0} stopped at time {1}'.format(expdict['metadata']['expNumber'], str(upToTime/60)))
+            break
+        elif 'BL' in dataLst[LoadIdx+1]:
+            print('For some reason there was a Baseline file in the middle of our experiment. weird right?')
+            break
+
+    return df
 
 def getFileLabel(String, fileType = 'exp'):
     # Takes the experimental filename and produces the best label for it. May not actually need a function for this. This might get annoying.
@@ -314,44 +390,143 @@ def getfiles(dirpath): #Pulled from stack overflow, returns files sorted by last
     a.sort(key=lambda s: os.path.getmtime(os.path.join(dirpath, s)))
     return a
 
+def SA1standardRAWloadingFunction(useCashe = False):
+    # So the same logic applies as in the standard loading function. We put code here that loads the entire labview dataset.
+    # I do wonder how long it would be and if we can cashe it. Probably can.
+
+
+
+    #What is the point? well now we can start to write automated analysis code that decomposes the signals down or time averages or filters them.
+    # Timing function
+    t1, timeTotal = time.time(), time.time()
+    # Figure out if a cashe file exists.
+    CasheFilename = 'Sa1RAWataset.pickle'
+
+    CasheExists = os.path.exists(os.path.join('cashe', CasheFilename))
+
+    if not useCashe or not CasheExists:
+        print('loading dataset fresh from on disk ')
+
+        # Keep the standard loading code here so we can easily call it other places.
+        experiment_lst = np.arange(2018104, 2018168 + 1)  # Create a range of the experiment lists
+        censor = np.isin(experiment_lst, [2018112, 2018120, 2018123, 2018153,
+                                          2018156])  # Create a boolean mask to exclude censored exps from the lst.
+
+        censor = [not i for i in censor]  # Invert the boolean mask
+        experiment_lst = experiment_lst[censor]  # Drop censored exp numbers
+        experiment_lst = list(map(str, experiment_lst))  # Convert the list to strings
+
+        MasterPath = r'C:\Program Files\RI DAS\DATAFILES' #where all the RIDAS data lives.
+
+        RawDataSet = dict()
+
+        for exp in experiment_lst:
+            expDir = Parse_experiment_dir(os.path.join(MasterPath, 'EXP #' + str(exp)))
+            if expDir['metadata']['ExpStart'] is not None:
+                #Load 0-240 min, file it under raw and let the RANDOM ACCESS MEMORY (RAM) FLOW THROUGH YOU.
+                #Ok that was a spectacular failure. Next strat is to cashe each experiment and then leave a path to the cashe in the dict.
+                # #only makes sense if we think that accessing from pickle is faster than loading from disk.
+                # expDir['RawDataCashe'] = LoadRawExperiment(expDir, TimeTup=(0, 240))
+                print('Loading experiment: {0}  Total of  {1} Files found'.format(str(exp), str(len(expDir['dataLst']))))
+                RawDataSet[expDir['metadata']['expNumber']] = expDir
+
+        print("Total Dataset Loaded and processed at {0} seconds".format(time.time() - timeTotal))
+
+        # Save the dataset to the cashe. (Maybe date the cashes, or that might lead to file inflation.
+        print('Cashing dataset to disk.')
+        with open(os.path.join('cashe', CasheFilename), 'wb') as f:
+            pickle.dump(RawDataSet, f)
+            print('Cashe dumped to disk  at {0} '.format(time.time() - timeTotal))
+
+    elif not CasheExists:
+        os.mkdir(os.path.join('cashe'))
+        print('Call loader recursively to refresh Cashe.')
+        SA1standardRAWloadingFunction(useCashe=False)
+
+    else:
+        # Load the dataset from disk.
+        with open(os.path.join('cashe', CasheFilename), 'rb') as f:
+            RawDataSet = pickle.load(f)
+            print('Cashe loaded from disk  in {0} '.format(time.time() - timeTotal))
+
+    return RawDataSet
+
+
+
+
 if __name__ == "__main__":
-    #Get an excel sheet with the paths to all the ICP spike height data.
-    DataSetPath = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\Brain_injury_dataset.xlsx"
-    Dataset = pd.read_excel(DataSetPath, header=[0])
-    print(Dataset.head())
-    Results_lst = []
-    #Iterate through the dataset, performing the analysis.
-    for row in Dataset.itertuples():
-        print(row[1])
-        if bool(row[4]) is True:
-            df= LoadLabviewData(os.path.join(row[2],row[3]))
-            #This is the fiber optic channel, it's empty in all the experiments after # 08,
-            # but what it does pick up on is the signal we sent to the soilnoid
-            # PlotTimeSeries(timeseries=df['Time'], dataSeries={'empty channel': df[df.columns.values[9]]} )
-            # plt.show()
-            #Add in some information from the Dataset, Name of experiment for example.
-            df.Experiment_name = row[1]
-            #Add the ICP Spike Height and ammount of brain damage found
-            df.ICPSpikeHeight = row[6]
-            df.BrainDamage = row[5]
-            Results = ICPSpikeAnalysis(df)
-            Results_lst.append([Results[0], Results[1],  df.ICPSpikeHeight ])
-            # print(Results[0][0])
 
-            # plt.show()
-    plt.show()
 
-    #Plot the results of the analysis here.
-    split1, split2 , split3 = zip(*Results_lst)
-    sign = lambda x: (1, -1)[x < 0]
-    lst = []
-    for idx, item in enumerate(split3):
-        lst.append(split2[idx] * sign(split1[idx]))
-    plt.scatter(split3,tuple(lst))
-    plt.title("Phase vs ICP spike height")
-    plt.xlabel("ICP spike height")
-    plt.ylabel("cycle of the resp signal")
-    plt.show()
+    RawDataSet = SA1standardRAWloadingFunction()
+
+
+
+    # for exp in RawDataSet:
+    #     expDict = RawDataSet[exp]
+    # for exp in RawDataSet:
+    #     expDict = RawDataSet[exp]
+
+
+        # plt.plot(df['Time'].iloc[:], df.iloc[:, 11])
+        # plt.title(expDict['metadata']['expNumber'])
+        # plt.show()
+
+    # exppath = r'C:\Program Files\RI DAS\DATAFILES\EXP #2018142'
+    #
+    # expdict = Parse_experiment_dir(exppath)
+    #
+    # print(expdict['metadata']['ExpStart'])
+    #
+    # df = LoadRawExperiment(expdict, TimeTup=(0, 60))
+    #
+    # #Plot the weight by time. Works properly.
+    # plt.plot(df['Time'].iloc[:], df.iloc[:, 11])
+    #     # plt.show()
+
+
+
+
+
+
+    #
+    # #Old attempt to look at the data from just the impact. Not a crazy thing to do, but not at the moment.
+    # #Get an excel sheet with the paths to all the ICP spike height data.
+    # DataSetPath = r"C:\Users\mattm\Documents\Gazmuri analysis\SA1 Analysis\Brain_injury_dataset.xlsx"
+    # Dataset = pd.read_excel(DataSetPath, header=[0])
+    # print(Dataset.head())
+    # Results_lst = []
+    # #Iterate through the dataset, performing the analysis.
+    # for row in Dataset.itertuples():
+    #     print(row[1])
+    #     if bool(row[4]) is True:
+    #         df= LoadLabviewData(os.path.join(row[2],row[3]))
+    #         #This is the fiber optic channel, it's empty in all the experiments after # 08,
+    #         # but what it does pick up on is the signal we sent to the soilinoid
+    #         # PlotTimeSeries(timeseries=df['Time'], dataSeries={'empty channel': df[df.columns.values[9]]} )
+    #         # plt.show()
+    #         #Add in some information from the Dataset, Name of experiment for example.
+    #         df.Experiment_name = row[1]
+    #         #Add the ICP Spike Height and ammount of brain damage found
+    #         df.ICPSpikeHeight = row[6]
+    #         df.BrainDamage = row[5]
+    #         Results = ICPSpikeAnalysis(df)
+    #         Results_lst.append([Results[0], Results[1],  df.ICPSpikeHeight ])
+    #         # print(Results[0][0])
+    #
+    #         # plt.show()
+    # plt.show()
+    #
+    # #Plot the results of the analysis here.
+    # split1, split2 , split3 = zip(*Results_lst)
+    # sign = lambda x: (1, -1)[x < 0]
+    # lst = []
+    # for idx, item in enumerate(split3):
+    #     lst.append(split2[idx] * sign(split1[idx]))
+    # plt.scatter(split3,tuple(lst))
+    # plt.title("Phase vs ICP spike height")
+    # plt.xlabel("ICP spike height")
+    # plt.ylabel("cycle of the resp signal")
+    # plt.show()
 
     #Form the dataset of processed experiments into a dataframe and output it to excel
     

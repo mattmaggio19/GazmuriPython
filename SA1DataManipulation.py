@@ -869,6 +869,15 @@ if __name__ == '__main__':
 
     # GroupedPlots(Dataset, Field='PetCO2 End Tidal Corrected', groupBy='Survival&Treatment', graph=True)
 
+    #Quickly caluclate the means and stdevs of BLlossby Kg
+    BLlst = []
+    for exp in Dataset:
+        if not np.isnan(exp['BloodLossByKg']):
+            BLlst.append(exp['BloodLossByKg'])
+
+    print('Mean of the BLbyKg is  : ' + str(np.mean(BLlst)))
+    print('Stdev of the BLbyKg is  : ' + str(np.std(BLlst)))
+
     TimeInvariantScatterPlot(Dataset, yfield='BloodLossByKg', xfield='Ao mean Time 30', seperateTreatement=True)
 
     TimeInvariantScatterPlot(Dataset, yfield='BloodLossByKg', xfield='Survival time', seperateTreatement=True)
