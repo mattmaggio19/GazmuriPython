@@ -839,7 +839,46 @@ def TimeInvariantScatterPlot(Dataset=None, xfield=None,yfield=None, seperateTrea
     plt.ylabel(yfield)
     plt.show()
 
+
+def TimeInvariantBarChart(Dataset=None, xfield=None, x_bin=None , yfield=None, seperateTreatement=False):
+    labels  = ['NS', 'TLP', 'POV','AVP']
+
+    #Extract the data of intrest from the dataset.
+
+
+    x = np.arange(len(labels))  # the label locations
+    width = 0.35  # the width of the bars
+
+    fig, ax = plt.subplots()
+    rects1 = ax.bar(x - width / 2, men_means, width, label='Men')
+    rects2 = ax.bar(x + width / 2, women_means, width, label='Women')
+
+    # Add some text for labels, title and custom x-axis tick labels, etc.
+    ax.set_ylabel('Scores')
+    ax.set_title('Scores by group and gender')
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels)
+    ax.legend()
+
+    def autolabel(rects):
+        """Attach a text label above each bar in *rects*, displaying its height."""
+        for rect in rects:
+            height = rect.get_height()
+            ax.annotate('{}'.format(height),
+                        xy=(rect.get_x() + rect.get_width() / 2, height),
+                        xytext=(0, 3),  # 3 points vertical offset
+                        textcoords="offset points",
+                        ha='center', va='bottom')
+
+    autolabel(rects1)
+    autolabel(rects2)
+
+    fig.tight_layout()
+
+    plt.show()
+
 def SaveFigureAsEPS(Fig, filepath=None):
+
     inkscape_path = "C://Program Files//Inkscape//inkscape.exe"\
 
     if filepath is not None:
@@ -854,6 +893,27 @@ def SaveFigureAsEPS(Fig, filepath=None):
         subprocess.call([inkscape_path, svg_filepath, '--export-emf', emf_filepath])
         # os.remove(svg_filepath)
 
+
+def SamplefigureGenerate():
+    x1 = np.linspace(0.0, 5.0)
+    x2 = np.linspace(0.0, 2.0)
+
+    y1 = np.cos(2 * np.pi * x1) * np.exp(-x1)
+    y2 = np.cos(2 * np.pi * x2)
+
+    plt.subplot(2, 1, 1)
+    plt.plot(x1, y1, 'o-')
+    plt.title('A tale of 2 subplots')
+    plt.ylabel('Damped oscillation')
+
+    plt.subplot(2, 1, 2)
+    plt.plot(x2, y2, '.-')
+    plt.xlabel('time (s)')
+    plt.ylabel('Undamped')
+    return plt.gcf()
+
+
+
 def PV_loop():
     #TODO Technically this isn't SA-1 material, but if I ever get around to doing this I'll troubleshoot the data here.
     pass
@@ -863,9 +923,11 @@ if __name__ == '__main__':
     Dataset = SA1DataLoader.StandardLoadingFunction(useCashe=True)
 
     # GroupedPlots(Dataset, Field='LV systolic', groupBy='HES120&Treatment', graph=True)
+    TimeInvariantBarChart(Dataset=Dataset, xfield='Lactate Ao or PA (OPTI) Max', x_bin = [2, 3, 4, 5, 6], yfield='Survival time', seperateTreatement=True)
 
     # Plot that identifies the HES administered per group against survival time and then graphs the histogram of HES admin per group with survivors vs non survivors
     # HESvsSurvival(Dataset, graph=True)
+
 
     # GroupedPlots(Dataset, Field='PetCO2 End Tidal Corrected', groupBy='Survival&Treatment', graph=True)
 

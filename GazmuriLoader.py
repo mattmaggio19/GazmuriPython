@@ -339,7 +339,7 @@ def LoadRawExperiment(expdict = None, TimeTup = (0, 15)):
         pass
     #Load the first exp.
     df = LoadLabviewData(path=os.path.join(Path, dataLst[LoadIdx]), samplingRate = 250, headers = 5)
-
+    df.set_index('Time')
     upToTime = df['Time'].iloc[-1]
 
     while round(upToTime/60) < TimeTup[1]:
@@ -349,7 +349,7 @@ def LoadRawExperiment(expdict = None, TimeTup = (0, 15)):
 
         #Add the upToTime to the new time col in the new dataframe, then merge them vertically.
         df1['Time'] = df1['Time'] + upToTime
-        df = pd.concat([df, df1], axis=0)
+        df = pd.concat([df, df1], axis=0, ignore_index=True)
 
         upToTime = df['Time'].iloc[-1] #update the time we are up to in seconds.
 
@@ -407,6 +407,8 @@ def SA1standardRAWloadingFunction(useCashe = False):
     if not useCashe or not CasheExists:
         print('loading dataset fresh from on disk ')
 
+        WD = os.getcwd()
+        CashePath = os.path.join(WD, 'cashe')
         # Keep the standard loading code here so we can easily call it other places.
         experiment_lst = np.arange(2018104, 2018168 + 1)  # Create a range of the experiment lists
         censor = np.isin(experiment_lst, [2018112, 2018120, 2018123, 2018153,
@@ -423,11 +425,20 @@ def SA1standardRAWloadingFunction(useCashe = False):
         for exp in experiment_lst:
             expDir = Parse_experiment_dir(os.path.join(MasterPath, 'EXP #' + str(exp)))
             if expDir['metadata']['ExpStart'] is not None:
-                #Load 0-240 min, file it under raw and let the RANDOM ACCESS MEMORY (RAM) FLOW THROUGH YOU.
-                #Ok that was a spectacular failure. Next strat is to cashe each experiment and then leave a path to the cashe in the dict.
-                # #only makes sense if we think that accessing from pickle is faster than loading from disk.
-                # expDir['RawDataCashe'] = LoadRawExperiment(expDir, TimeTup=(0, 240))
+
                 print('Loading experiment: {0}  Total of  {1} Files found'.format(str(exp), str(len(expDir['dataLst']))))
+
+                #TODO Load 0-240 min, file it under raw and let the RANDOM ACCESS MEMORY (RAM) FLOW THROUGH YOU.
+                #TODO Ok that was a spectacular failure. Next strat is to cashe each experiment and then leave a path to the cashe in the dict.
+                # #only makes sense if we think that accessing from pickle is faster than loading from disk. It probably is.
+                #
+                #TODO Cashe each experiment raw data to disk JSON and leave the full filename in the experiment directory.
+                # RawDataCashe = LoadRawExperiment(expDir, TimeTup=(0, 240))
+                # CasheExpFilePath = os.path.join(CashePath, 'exp '+ expDir['metadata']['expNumber'] + '.pickle')
+                # RawDataCashe.to_json(CasheExpFilePath)
+                # expDir['metadata']['RawDataCashe'] = CasheExpFilePath
+                #TODO Find a casheing strategy that works, we are actually about 50% less space  writing to JSON objects.
+                #Right now, Casheing doesn't really work, so everytime you need raw data from on disk, you have to go load it.
                 RawDataSet[expDir['metadata']['expNumber']] = expDir
 
         print("Total Dataset Loaded and processed at {0} seconds".format(time.time() - timeTotal))
